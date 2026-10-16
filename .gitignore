@@ -1,0 +1,27 @@
+# Code-only repository: ignore everything unless explicitly allowed below.
+# Data, records, workbooks, settings, environments and generated files stay local.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/environment.yml
+!/pyproject.toml
+!/launch.ps1
+!/launch.sh
+
+!/experiment_logger/
+/experiment_logger/**
+!/experiment_logger/*.py
+!/experiment_logger/schemas/
+!/experiment_logger/schemas/record.json
+!/experiment_logger/templates/
+!/experiment_logger/templates/task_data.json
+
+!/tests/
+/tests/**
+!/tests/*.py
+
+!/examples/
+/examples/**
+!/examples/create_demo.py
+!/examples/matlab_json_smoke.m

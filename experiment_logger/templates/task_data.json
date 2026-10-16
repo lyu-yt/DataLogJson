@@ -1,0 +1,66 @@
+{
+  "template_version": "1.2.0",
+  "schema_version": "1.2.0",
+  "record_type": "data",
+  "data_type": "task",
+  "record_state": "draft",
+  "record_id": null,
+  "mouse_id": null,
+  "session_id": null,
+  "experiment_type": null,
+  "session_date": null,
+  "operator": null,
+  "created_at": null,
+  "finalization": {
+    "finalized_at": null,
+    "finalized_by": null
+  },
+  "acquisition": {
+    "started_at": null,
+    "ended_at": null,
+    "clock_id": null,
+    "software": {
+      "name": null,
+      "version": null,
+      "code_repository": null,
+      "code_commit": null,
+      "code_snapshot_file_id": null
+    }
+  },
+  "files": [],
+  "metadata": {
+    "task_name": "push",
+    "protocol": {
+      "protocol_id": null,
+      "version": null,
+      "description": null,
+      "document_file_id": null
+    },
+    "apparatus": {
+      "rig_id": null,
+      "controller_model": null,
+      "push_sensor_model": null,
+      "push_measurement_unit": null,
+      "calibration_file_id": null,
+      "setup_notes": null
+    },
+    "training": {
+      "stage": null,
+      "stage_definition": null,
+      "assistance_provided": null,
+      "assistance_description": null,
+      "reward_type": null,
+      "reward_volume_ul": null,
+      "trainer_observations": null,
+      "protocol_deviations": null
+    },
+    "task_parameters": [],
+    "quality_notes": null,
+    "mouse_weight_g": null,
+    "training_day": null,
+    "training_day_definition": "operator-assigned training day; not computed from calendar date",
+    "is_imaging_session": null
+  },
+  "related_records": [],
+  "notes": null
+}

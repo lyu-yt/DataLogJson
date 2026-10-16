@@ -1,0 +1,1105 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.2.0"
+    },
+    "record_type": {
+      "enum": [
+        "data",
+        "session",
+        "amendment",
+        "analysis_run"
+      ]
+    },
+    "record_state": {
+      "enum": [
+        "draft",
+        "finalized"
+      ]
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "operator": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "finalization": {
+      "type": "object",
+      "properties": {
+        "finalized_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalized_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "finalized_at",
+        "finalized_by"
+      ],
+      "additionalProperties": false
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "mouse_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{3}$"
+    },
+    "session_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "experiment_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]*\\S[^\\u0000-\\u001f\\u007f]*$"
+    },
+    "data_type": {
+      "const": "task"
+    },
+    "acquisition": {
+      "type": "object",
+      "properties": {
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clock_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "software": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "started_at",
+        "ended_at",
+        "clock_id",
+        "software"
+      ],
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "mouse_weight_g": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "training_day": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "training_day_definition": {
+          "const": "operator-assigned training day; not computed from calendar date"
+        },
+        "is_imaging_session": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "protocol": {
+          "type": "object"
+        },
+        "apparatus": {
+          "type": "object"
+        },
+        "training": {
+          "type": "object"
+        },
+        "task_parameters": {
+          "type": "array"
+        },
+        "quality_notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_name": {
+          "const": "push"
+        }
+      },
+      "required": [
+        "mouse_weight_g",
+        "training_day",
+        "training_day_definition",
+        "is_imaging_session",
+        "protocol",
+        "apparatus",
+        "training",
+        "task_parameters",
+        "quality_notes",
+        "task_name"
+      ],
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "type": "string",
+            "minLength": 1
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "original_filename": {
+            "type": "string",
+            "minLength": 1
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "csv": {
+            "type": "object",
+            "properties": {
+              "encoding": {
+                "const": "utf-8-sig"
+              },
+              "delimiter": {
+                "const": "\t"
+              },
+              "has_header": {
+                "const": false
+              },
+              "header_row": {
+                "type": "null"
+              },
+              "row_unit": {
+                "const": "sample"
+              },
+              "row_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "mapping_source": {
+                "type": "string",
+                "minLength": 1
+              },
+              "columns": {
+                "type": "array",
+                "minItems": 13,
+                "maxItems": 14,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source_index": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "source_name": {
+                      "type": "null"
+                    },
+                    "semantic_name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "value_type": {
+                      "const": "number"
+                    },
+                    "unit": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "missing_values": {
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "source_index",
+                    "source_name",
+                    "semantic_name",
+                    "description",
+                    "value_type",
+                    "unit",
+                    "missing_values"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "time_reference": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "sample_index"
+                  },
+                  "first_sample_index": {
+                    "const": 0
+                  },
+                  "sample_interval_s": {
+                    "type": "null"
+                  },
+                  "status": {
+                    "const": "unknown"
+                  },
+                  "clock_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "zero_definition": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "kind",
+                  "first_sample_index",
+                  "sample_interval_s",
+                  "status",
+                  "clock_id",
+                  "zero_definition"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "encoding",
+              "delimiter",
+              "has_header",
+              "header_row",
+              "row_unit",
+              "row_count",
+              "mapping_source",
+              "columns",
+              "time_reference"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "file_id",
+          "role",
+          "format",
+          "media_type",
+          "original_filename",
+          "size_bytes",
+          "sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "related_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "record_id",
+          "sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "datasets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "record_id",
+          "sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "training_day": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "original": {
+      "type": "object",
+      "properties": {
+        "record_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "record_id",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "corrected_values": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "run": {
+      "type": "object",
+      "properties": {
+        "analysis_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "record_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "record_id",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "input_files": {
+          "type": "array"
+        },
+        "upstream_run_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          }
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "entry_point": {
+          "type": "string"
+        },
+        "working_directory": {
+          "type": "object",
+          "required": [
+            "root_id",
+            "relative_path"
+          ]
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "code_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "code_snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "success",
+            "failure",
+            "interrupted"
+          ]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "return_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "environment": {
+          "type": "object",
+          "required": [
+            "python",
+            "packages",
+            "platform",
+            "external_helpers"
+          ]
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "execution_log_file_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "analysis_name",
+        "inputs",
+        "input_files",
+        "upstream_run_ids",
+        "command",
+        "entry_point",
+        "working_directory",
+        "parameters",
+        "seed",
+        "code_commit",
+        "code_snapshot_sha256",
+        "status",
+        "started_at",
+        "ended_at",
+        "return_code",
+        "environment",
+        "metrics",
+        "execution_log_file_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "record_type",
+    "record_state",
+    "record_id",
+    "created_at",
+    "operator",
+    "finalization"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:mouse-experiment-logger:record:1.2.0",
+  "title": "Experiment records and editable mouse profiles",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "data"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "session_id",
+          "mouse_id",
+          "session_date",
+          "experiment_type",
+          "data_type",
+          "acquisition",
+          "metadata",
+          "files",
+          "notes",
+          "related_records"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "session"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "session_id",
+          "mouse_id",
+          "session_date",
+          "experiment_type",
+          "acquisition",
+          "training_day",
+          "datasets"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "amendment"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "original",
+          "reason",
+          "corrected_values"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "analysis_run"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "run"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_state": {
+            "const": "finalized"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "operator": {
+            "type": "string",
+            "minLength": 1
+          },
+          "finalization": {
+            "type": "object",
+            "properties": {
+              "finalized_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+              },
+              "finalized_by": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "finalized_at",
+              "finalized_by"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "finalization": {
+            "type": "object",
+            "properties": {
+              "finalized_at": {
+                "type": "null"
+              },
+              "finalized_by": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "finalized_at",
+              "finalized_by"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_state": {
+            "const": "finalized"
+          },
+          "record_type": {
+            "const": "data"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mouse_id": {
+            "type": "string"
+          },
+          "session_date": {
+            "type": "string"
+          },
+          "experiment_type": {
+            "type": "string"
+          },
+          "files": {
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "required": [
+                "csv"
+              ]
+            }
+          },
+          "metadata": {
+            "properties": {
+              "mouse_weight_g": {
+                "type": "number"
+              },
+              "training_day": {
+                "type": "integer"
+              },
+              "is_imaging_session": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_state": {
+            "const": "finalized"
+          },
+          "record_type": {
+            "const": "analysis_run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "success",
+                  "failure",
+                  "interrupted"
+                ]
+              },
+              "ended_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+              },
+              "execution_log_file_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              }
+            }
+          },
+          "files": {
+            "minItems": 2
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "mouse_profile": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.2.0"
+        },
+        "profile_type": {
+          "const": "mouse"
+        },
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "mouse_id": {
+          "type": "string",
+          "pattern": "^[0-9]{3}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "updated_by": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "colony_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strain": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "genotype": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cage_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "use_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "labels": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "colony_notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "system_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date_of_birth": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "surgeries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "surgery_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "details": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "surgeon": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "surgery_id",
+              "date",
+              "details",
+              "surgeon"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "import_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "import_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "imported_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+              },
+              "imported_by": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "selected_colony_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "matched_mouse_id": {
+                "type": "string",
+                "pattern": "^[0-9]{3}$"
+              },
+              "confirmed_selection": {
+                "const": true
+              },
+              "read_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "workbook_filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "workbook_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "sheet": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "row": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "cells": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "source_values": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "workbook_filename",
+                  "workbook_sha256",
+                  "sheet",
+                  "row",
+                  "cells",
+                  "source_values"
+                ],
+                "additionalProperties": false
+              },
+              "imported_values": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "import_id",
+              "imported_at",
+              "imported_by",
+              "selected_colony_id",
+              "matched_mouse_id",
+              "confirmed_selection",
+              "read_at",
+              "source",
+              "imported_values"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "profile_type",
+        "profile_id",
+        "mouse_id",
+        "revision",
+        "created_at",
+        "created_by",
+        "updated_at",
+        "updated_by",
+        "colony_id",
+        "strain",
+        "sex",
+        "genotype",
+        "cage_id",
+        "use_status",
+        "labels",
+        "colony_notes",
+        "system_id",
+        "notes",
+        "date_of_birth",
+        "surgeries",
+        "import_history"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

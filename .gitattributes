@@ -1,0 +1,5 @@
+# Portable source/launcher line endings; keep pinned JSON bytes identical on every OS.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+/experiment_logger/schemas/*.json -text whitespace=cr-at-eol
+/experiment_logger/templates/*.json -text whitespace=cr-at-eol
