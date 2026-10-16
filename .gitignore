@@ -4,6 +4,7 @@
 !/.gitignore
 !/.gitattributes
 !/README.md
+!/LICENSE
 !/environment.yml
 !/pyproject.toml
 !/launch.ps1

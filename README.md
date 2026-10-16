@@ -83,3 +83,8 @@ Current scope: one operator and headerless, tab-separated push-task CSVs with
 plots show sample index, not inferred timing or task performance. Imaging is a
 session flag; imaging-data workflows and MATLAB analysis execution are future
 extensions. Linux/NAS locking and recovery need deployment-specific checks.
+
+## License
+
+Project source is licensed under the [MIT License](LICENSE). Dependencies retain
+their own licenses.

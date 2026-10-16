@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "mouse-experiment-logger"
 version = "0.1.0"
 requires-python = ">=3.12"
+license = { file = "LICENSE" }
 dependencies = ["jsonschema>=4.23,<5", "PySide6>=6.7,<7", "openpyxl>=3.1,<4"]
 
 [project.scripts]
