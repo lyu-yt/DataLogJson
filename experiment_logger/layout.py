@@ -99,6 +99,8 @@ def reserve_label(record, labels, archive, records):
 
 
 def role_filename(record):
+    if record.get("data_type") == "expression":
+        return "expression.json"
     return {"data": "task.json", "session": "session.json", "amendment": "amendment.json",
             "analysis_run": "analysis_run.json"}[record["record_type"]]
 

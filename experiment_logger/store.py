@@ -150,6 +150,19 @@ class Store:
     def new(self, source):
         return {"revision": 0, "record": new_task(source), "source_path": str(Path(source).resolve())}
 
+    def new_expression(self, folder):
+        from .expression import new_expression
+        return new_expression(folder)
+
+    def plan_expression(self, draft):
+        from .expression import plan_expression
+        return plan_expression(self, draft)
+
+    def finalize_expression(self, draft, *, source_complete=False, progress=None, cancel=None, failpoint=None):
+        from .expression import finalize_expression
+        return finalize_expression(self, draft, source_complete=source_complete,
+                                   progress=progress, cancel=cancel, failpoint=failpoint)
+
     def save_draft(self, draft):
         r = draft["record"]
         require_valid(r)
@@ -171,9 +184,12 @@ class Store:
     def load_draft(self, rid):
         return read_json(self._path(rid, self.local / "drafts"))
 
-    def drafts(self):
-        return [read_json(p) for p in sorted((self.local / "drafts").glob("*.json"))
-                if p.stem not in self.index()]
+    def drafts(self, *, index=None):
+        paths = sorted((self.local / "drafts").glob("*.json"))
+        if not paths:
+            return []
+        published = self.index() if index is None else index
+        return [read_json(p) for p in paths if p.stem not in published]
 
     def _catalog(self):
         return read_json(self.metadata / "catalog.json")
@@ -204,6 +220,7 @@ class Store:
 
     def index(self):
         result = {}
+        session_datasets = {}
         root = self.metadata / "records"
         # Profiles sit at mouse level and are not finalized acquisition bundles.
         # Discover both historical flat bundles and the nested mouse/date layout.
@@ -211,7 +228,7 @@ class Store:
             if not folder.is_dir() or folder.is_symlink():
                 continue
             if (not (folder / "manifest.json").is_file() and not any(folder.glob("*.seal.json"))
-                    and not any((folder / name).is_file() for name in ("task.json", "session.json", "analysis_run.json", "amendment.json"))):
+                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "session.json", "analysis_run.json", "amendment.json"))):
                 continue
             try:
                 entries = bundle_entries(folder)
@@ -242,6 +259,17 @@ class Store:
                                "data_type": r.get("data_type"),
                                "training_day": (r.get("training_day") if r.get("record_type") == "session"
                                                 else r.get("metadata", {}).get("training_day"))}
+                if r.get("record_type") == "session" and integrity == "ok":
+                    session_datasets[rid] = r.get("datasets", [])
+        # Category filters include a session when its fixed dataset references
+        # resolve to one category. This is a rebuildable view, not a record edit.
+        for rid, references in session_datasets.items():
+            datasets = [result.get(ref["record_id"], {}) for ref in references]
+            if datasets and all(info.get("integrity") == "ok" and info.get("sha256") == ref["sha256"]
+                                for info, ref in zip(datasets, references)):
+                categories = {info.get("data_type") for info in datasets}
+                if len(categories) == 1:
+                    result[rid]["data_type"] = next(iter(categories))
         return result
 
     def rebuild_index(self):
@@ -250,16 +278,20 @@ class Store:
             atomic_json(self.metadata / "record_index.json", result)
             return result
 
-    def read_record(self, rid):
-        info = self.index().get(rid)
+    def read_record(self, rid, *, index=None):
+        """Reuse a caller's current scan, but recheck the bytes actually read."""
+        info = (self.index() if index is None else index).get(rid)
         if not info:
             raise LoggerError(f"Record not found: {rid}")
         if info["integrity"] != "ok":
             raise LoggerError(info["integrity"])
-        return read_json(resolve(self.metadata, info["relative_path"]))
+        raw = resolve(self.metadata, info["relative_path"]).read_bytes()
+        if digest(raw) != info["sha256"]:
+            raise LoggerError("Record checksum mismatch; refresh the archive before continuing")
+        return loads(raw)
 
-    def file_locations(self, fid):
-        item = self._catalog()["files"].get(fid)
+    def file_locations(self, fid, *, catalog=None):
+        item = (self._catalog() if catalog is None else catalog)["files"].get(fid)
         if not item:
             raise LoggerError(f"Unregistered file ID: {fid}")
         results = []
@@ -549,6 +581,11 @@ class Store:
             return {"git_committed": True, "commit": self.git("rev-parse", "HEAD"), "backed_up": False}
 
     def finalize(self, draft, *, move=False, source_complete=False, progress=None, cancel=None, failpoint=None):
+        if draft["record"].get("data_type") == "expression":
+            if move:
+                raise LoggerError("Expression logging copies TIFFs; source removal is not supported")
+            return self.finalize_expression(draft, source_complete=source_complete,
+                                            progress=progress, cancel=cancel, failpoint=failpoint)
         if not source_complete:
             raise LoggerError("Confirm acquisition has finished and the source file is closed")
         self._check_ready()
@@ -653,6 +690,8 @@ class Store:
 
     def preview(self, rid, limit=20):
         r = self.read_record(rid)
+        if r.get("data_type") != "task":
+            raise LoggerError("CSV preview is available only for task records")
         if not r.get("files"):
             return [], []
         f = r["files"][0]

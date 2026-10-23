@@ -17,7 +17,7 @@ TASK_TYPES = ("water linear push", "water two-angle push")
 COLUMNS = ("pos_x", "pos_y", "cur1", "cur2", "mvtyp", "mvangl", "frame_right",
            "frame_left", "lick", "sol", "states", "laser", "camfr", "laserCounter")
 RESOURCE = Path(__file__).parent
-SCHEMA_VERSION = "1.2.0"
+SCHEMA_VERSION = "1.3.0"
 SCHEMA_FILES = {SCHEMA_VERSION: "record.json"}
 
 
@@ -136,7 +136,7 @@ def validate(record, final=False, schema=None):
             for key in ("mouse_id", "session_date", "experiment_type"):
                 if record.get(key) is None:
                     errors.append(f"{key}: required")
-    if record["record_type"] == "data":
+    if record["record_type"] == "data" and record.get("data_type") == "task":
         m = record["metadata"]
         if is_final:
             for field in ("mouse_weight_g", "training_day", "is_imaging_session"):
@@ -155,6 +155,10 @@ def validate(record, final=False, schema=None):
                 errors.append(f"files.{i}.csv.columns: unresolved positional mapping")
             if csvmeta.get("delimiter") != "\t" or csvmeta.get("has_header") is not False or csvmeta.get("row_unit") != "sample":
                 errors.append(f"files.{i}.csv: unsupported mapping")
+    if record["record_type"] == "data":
+        if record.get("data_type") == "expression":
+            from .expression import record_errors
+            errors.extend(record_errors(record, is_final))
         ids = [f.get("file_id") for f in record["files"]]
         if len(ids) != len(set(ids)):
             errors.append("files: duplicate file IDs")
@@ -185,6 +189,6 @@ def session_for(data, checksum):
     for key in ("mouse_id", "session_id", "session_date", "experiment_type", "operator"):
         s[key] = data[key]
     s["acquisition"] = deepcopy(data["acquisition"])
-    s["training_day"] = data["metadata"]["training_day"]
+    s["training_day"] = data["metadata"].get("training_day")
     s["datasets"] = [{"record_id": data["record_id"], "sha256": checksum}]
     return seal_record(s, data["finalization"]["finalized_by"])

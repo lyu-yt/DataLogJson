@@ -17,6 +17,8 @@ def main(argv=None):
     init.add_argument("--operator", required=True)
     new = sub.add_parser("draft")
     new.add_argument("source")
+    expr = sub.add_parser("expression-draft", help="Create an expression draft from one mouse folder")
+    expr.add_argument("folder")
     final = sub.add_parser("finalize")
     final.add_argument("draft_id")
     final.add_argument("--source-complete", action="store_true")
@@ -70,6 +72,10 @@ def main(argv=None):
             match args.action:
                 case "draft":
                     d = store.new(args.source)
+                    d["record"]["operator"] = config["operator"]
+                    result = store.save_draft(d)
+                case "expression-draft":
+                    d = store.new_expression(args.folder)
                     d["record"]["operator"] = config["operator"]
                     result = store.save_draft(d)
                 case "finalize":

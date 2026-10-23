@@ -1,6 +1,6 @@
 # DataLogJson
 
-A local Python desktop app for mouse task logging, mouse-colony profiles, and
+A local Python desktop app for mouse task logging, expression checks, mouse-colony profiles, and
 tracking data files on local or mounted storage. Uses plain JSON and local Git
 history; no server or database is required.
 
@@ -20,7 +20,7 @@ in `datalogjson`, not Conda base. Launchers: `launch.ps1` and `launch.sh`.
 
 ## Features
 
-- **Log session:** drop a completed task CSV; infer/review mouse ID and date; enter
+- **Behavior:** drop a completed task CSV; infer/review mouse ID and date; enter
   weight, preset/custom task type, training day, imaging-session flag, and notes.
   Save/reopen drafts, validate, and finalize with verified copying or an explicitly
   confirmed move. File checks/transfers show progress and support cancellation.
@@ -29,9 +29,14 @@ in `datalogjson`, not Conda base. Launchers: `launch.ps1` and `launch.sh`.
   confirm the correct row when IDs repeat or have letter prefixes. Add manual
   notes and multiple surgeries with dates, details, and optional surgeon. Save
   editable profiles with revision checks, import provenance, and Git history.
-- **Browse / details:** filter by mouse, date, training day, task, and record type.
+- **Expression:** drop a mouse folder (or choose a mouse from a date folder).
+  Detect left red/green, right, and other TIFFs; review checkboxes and editable
+  paths, including multiple files per channel. Add optional notes, save a draft,
+  and finalize verified archive copies. Sources are retained; filename collisions
+  get numbered suffixes. TIFF stacks are not decoded or analyzed.
+- **Browse / details:** filter by mouse, date, training day, experiment, data type, and record type.
   Separate `data` and `session` rows show training day. Inspect read-only JSON,
-  CSV previews, numeric plots, amendments, and analysis history.
+  CSV previews, numeric plots, expression file locations, amendments, and analysis history.
 - **Locations:** verify full SHA-256 hashes, find missing files within selected
   roots, and relink verified copies. Rebuild/commit catalogs and rebuild indexes.
   Change a root's configured path when moving an entire archive.
@@ -54,7 +59,15 @@ metadata-json/records/mouse_007/
     task.json
     session.json
     manifest.json
+  YYMMDD/expression_check_2/
+    expression.json
+    session.json
+    manifest.json
 robot-csv/mouse_007/YYMMDD/1/file.csv
+expression/mouse_007/YYMMDD/left/green/green_001.tif
+expression/mouse_007/YYMMDD/left/red/red_001.tif
+expression/mouse_007/YYMMDD/right/right_001.tif
+expression/mouse_007/YYMMDD/other/extra_001.tif
 ```
 
 Mouse IDs stay three-digit strings. JSON dates use `YYYY-MM-DD`; training day is a
@@ -67,6 +80,12 @@ outputs. Machine settings/drafts stay in `.logger-local/`; the archive's separat
 metadata Git repository stays local. Back up the complete archive and local state;
 Git alone is not a data backup, and backups are not automated.
 
+Schema 1.3.0 adds expression records. Older finalized records and their schemas
+retain their exact bytes; editable colony profiles update only on explicit save.
+After an interrupted TIFF copy, retry Finalize to reuse verified copies. The
+private `.logger-local/expression-transfers/` journals preserve planned paths;
+include them in local-state backups. Browse Recover handles pending metadata/Git publication.
+
 ## Checks and limits
 
 ```sh
@@ -75,14 +94,14 @@ python examples/create_demo.py --destination /absolute/path/to/new-demo-folder
 ```
 
 Tests generate temporary synthetic data. For MATLAB JSON decoding, set
-`LOGGER_JSON_FIXTURE` in MATLAB to a generated synthetic `task.json`, then run
+`LOGGER_JSON_FIXTURE` in MATLAB to a generated synthetic `task.json` or `expression.json`, then run
 `examples/matlab_json_smoke.m`.
 
 Current scope: one operator and headerless, tab-separated push-task CSVs with
 13-14 numeric columns. Sampling rate/units remain unknown where not supplied;
-plots show sample index, not inferred timing or task performance. Imaging is a
-session flag; imaging-data workflows and MATLAB analysis execution are future
-extensions. Linux/NAS locking and recovery need deployment-specific checks.
+plots show sample index, not inferred timing or task performance. Expression
+logging registers TIFF files; image analysis, calcium-imaging workflows, and MATLAB
+analysis execution are future extensions. Linux/NAS locking and recovery need deployment-specific checks.
 
 ## License
 

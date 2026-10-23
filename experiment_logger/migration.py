@@ -23,7 +23,8 @@ def plan_migration(store):
         raise LoggerError("Repair record integrity failures before migration")
     labels = deepcopy(store._labels())
     catalog = store._catalog()
-    data = [store.read_record(i["record_id"]) for i in index.values() if i["record_type"] == "data"]
+    data = [store.read_record(i["record_id"]) for i in index.values()
+            if i["record_type"] == "data" and i.get("data_type") == "task"]
     data.sort(key=lambda r: (r["session_date"], r["created_at"], r["record_id"]))
     bundles, moves = [], []
     for r in data:

@@ -4,6 +4,7 @@ from copy import deepcopy
 from .colony import require_profile
 from .io import LoggerError, atomic_bytes, atomic_json, digest, encode, lock, now, read_json, resolve, uid
 from .layout import mouse_folder
+from .models import SCHEMA_VERSION
 
 
 def relative_path(mouse_id):
@@ -19,6 +20,10 @@ def load_profile(store, mouse_id):
     require_profile(profile, schema)
     if profile["mouse_id"] != mouse_id:
         raise LoggerError("Mouse profile ID does not match its directory")
+    # Editable profiles are upgraded in memory; only an explicit save changes
+    # their file/revision. Scientific acquisition records are never migrated here.
+    profile["schema_version"] = SCHEMA_VERSION
+    require_profile(profile)
     return profile
 
 

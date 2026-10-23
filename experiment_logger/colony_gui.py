@@ -174,9 +174,14 @@ class ColonyTab:
             self.config["colony_workbook"] = path
             atomic_json(self.config_path, self.config)
             self.show_colony_matches([])
-            self.run_job(lambda progress, cancel: search_workbook(path, profile["mouse_id"], progress, cancel), self.show_colony_matches)
+            self.run_job(lambda progress, cancel: search_workbook(path, profile["mouse_id"], progress, cancel),
+                         self.colony_search_finished, refresh_archive=False)
         except Exception as exc:
             self.error(str(exc))
+
+    def colony_search_finished(self, candidates):
+        self.show_colony_matches(candidates)
+        self.status.setText(self.colony_match_info.text())
 
     def show_colony_matches(self, candidates):
         self.colony_matches = candidates
@@ -227,7 +232,8 @@ class ColonyTab:
         try:
             profile = self.collect_colony_profile()
             require_profile(profile)
-            self.run_job(lambda _progress, _cancel: self.store.save_mouse_profile(profile, self.config["operator"]), self.colony_saved)
+            self.run_job(lambda _progress, _cancel: self.store.save_mouse_profile(profile, self.config["operator"]),
+                         self.colony_saved, refresh_archive=False)
         except Exception as exc:
             self.error(str(exc))
 

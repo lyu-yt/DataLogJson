@@ -9,7 +9,7 @@ import pytest
 
 from experiment_logger.io import LoggerError, atomic_json, digest, encode, read_json, uid
 from experiment_logger.layout import bundle_entries
-from experiment_logger.models import new_task, validate
+from experiment_logger.models import new_task, validate, SCHEMA_VERSION
 
 
 def legacy_bundle(store, draft):
@@ -52,7 +52,7 @@ def test_custom_task_and_three_file_readable_bundle(store, draft):
     bundle = store.metadata / result["record_directory"]
     assert {p.name for p in bundle.iterdir()} == {"task.json", "session.json", "manifest.json"}
     r = store.read_record(draft["record"]["record_id"])
-    assert r["schema_version"] == "1.2.0"
+    assert r["schema_version"] == SCHEMA_VERSION
     assert r["experiment_type"] == "User choice / task: A"
     assert store.read_record(r["session_id"])["experiment_type"] == r["experiment_type"]
     manifest = read_json(bundle / "manifest.json")

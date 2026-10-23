@@ -18,6 +18,7 @@ from .models import TASK_TYPES, SCHEMA_VERSION, validate
 from .store import Store
 from .layout import metadata_directory
 from .colony_gui import ColonyTab
+from .expression_gui import ExpressionTab
 
 
 class Job(QThread):
@@ -25,9 +26,10 @@ class Job(QThread):
     error = Signal(str)
     progress = Signal(int)
 
-    def __init__(self, function):
+    def __init__(self, function, *, refresh_archive=True):
         super().__init__()
         self.function = function
+        self.refresh_archive = refresh_archive
         self.stop = threading.Event()
 
     def run(self):
@@ -85,7 +87,7 @@ class Trace(QWidget):
             painter.drawLine(a, b)
 
 
-class Window(QMainWindow, ColonyTab):
+class Window(QMainWindow, ColonyTab, ExpressionTab):
     def __init__(self, config_path=None):
         super().__init__()
         self.config_path = Path(config_path or ".logger-local/config.json").resolve()
@@ -109,6 +111,7 @@ class Window(QMainWindow, ColonyTab):
         self._entry_tab()
         self._browse_tab()
         self._colony_tab()
+        self._expression_tab()
         self._locations_tab()
         self._settings_tab()
         footer = QHBoxLayout()
@@ -156,7 +159,7 @@ class Window(QMainWindow, ColonyTab):
         return button
 
     def _entry_tab(self):
-        layout = self._page("Log session")
+        layout = self._page("Behavior")
         self.drop = DropZone()
         self.drop.dropped.connect(self.load_source)
         layout.addWidget(self.drop)
@@ -236,20 +239,28 @@ class Window(QMainWindow, ColonyTab):
         self.filter_day = QLineEdit()
         self.filter_day.setPlaceholderText("Training day")
         self.filter_task = QComboBox()
-        self.filter_task.addItems(["All task types", *TASK_TYPES])
+        self.filter_task.addItems(["All experiment types", *TASK_TYPES])
         self.filter_task.setEditable(True)
         self.filter_kind = QComboBox()
         self.filter_kind.addItems(["All record types", "data", "session", "amendment", "analysis_run"])
-        for w in (self.filter_mouse, self.filter_date, self.filter_day, self.filter_task, self.filter_kind):
+        for w in (self.filter_mouse, self.filter_date, self.filter_day, self.filter_task):
             filters.addWidget(w)
-        self._button("Refresh", self.refresh, filters)
         layout.addLayout(filters)
+        kinds = QHBoxLayout()
+        self.filter_data_type = QComboBox()
+        self.filter_data_type.addItems(["All data types", "task", "expression"])
+        kinds.addWidget(self.filter_kind)
+        kinds.addWidget(self.filter_data_type)
+        self._button("Refresh", self.refresh, kinds)
+        kinds.addStretch()
+        layout.addLayout(kinds)
         for w in (self.filter_mouse, self.filter_date, self.filter_day):
             w.textChanged.connect(self.refresh_records)
         self.filter_task.currentTextChanged.connect(self.refresh_records)
         self.filter_kind.currentIndexChanged.connect(self.refresh_records)
+        self.filter_data_type.currentIndexChanged.connect(self.refresh_records)
         self.records = QTableWidget(0, 8)
-        self.records.setHorizontalHeaderLabels(["Mouse", "Date", "Day", "Record type", "Task", "Files", "Integrity", "Record ID"])
+        self.records.setHorizontalHeaderLabels(["Mouse", "Date", "Day", "Record type", "Experiment", "Files", "Integrity", "Record ID"])
         self.records.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.records.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.records.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
@@ -262,6 +273,11 @@ class Window(QMainWindow, ColonyTab):
         self.csv_table = QTableWidget()
         self.csv_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.detail_tabs.addTab(self.csv_table, "CSV preview")
+        self.expression_files = QTableWidget(0, 5)
+        self.expression_files.setHorizontalHeaderLabels(["Channel", "Original filename", "Bytes", "Archive path", "Status"])
+        self.expression_files.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.expression_files.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.detail_tabs.addTab(self.expression_files, "Expression files")
         plot_page = QWidget()
         plot_layout = QVBoxLayout(plot_page)
         self.plot_column = QComboBox()
@@ -315,6 +331,7 @@ class Window(QMainWindow, ColonyTab):
         layout.addWidget(QLabel("Metadata: <archive>/metadata-json/records/mouse_<ID>/YYMMDD/<task>_<number>/\n"
                                "CSVs: <archive>/robot-csv/mouse_<ID>/YYMMDD/<number>/\n"
                                "Mouse profile: <archive>/metadata-json/records/mouse_<ID>/mouse_info.json\n"
+                               "Expression TIFFs: <archive>/expression/mouse_<ID>/YYMMDD/left/green, left/red, right, other\n"
                                "Machine paths stay in local settings. Git stays local. Backups are separate.\n"
                                "To relocate a root, update its path here. Keep its logical root name the same."))
         layout.addStretch()
@@ -349,6 +366,8 @@ class Window(QMainWindow, ColonyTab):
             atomic_json(self.config_path, config)
             self.config, self.store = config, store
             self.colony_profile = self.colony_saved_profile = None
+            self.expression_draft = None
+            self.clear_expression_fields()
             self.refresh()
             self.status.setText(f"Storage ready. Metadata repository: {store.metadata}. Drop a CSV to log a session.")
             self.tabs.setCurrentIndex(0)
@@ -426,10 +445,10 @@ class Window(QMainWindow, ColonyTab):
         except Exception as exc:
             self.error(str(exc))
 
-    def run_job(self, function, success):
+    def run_job(self, function, success, *, refresh_archive=True):
         if self.job and self.job.isRunning():
             return
-        self.job = Job(function)
+        self.job = Job(function, refresh_archive=refresh_archive)
         self.tabs.setEnabled(False)
         self.progress.setValue(0)
         self.progress.setVisible(True)
@@ -445,7 +464,8 @@ class Window(QMainWindow, ColonyTab):
         self.tabs.setEnabled(True)
         self.progress.setVisible(False)
         self.cancel_button.setVisible(False)
-        self.refresh()
+        if self.job is None or self.job.refresh_archive:
+            self.refresh()
 
     def finalize(self):
         try:
@@ -477,28 +497,41 @@ class Window(QMainWindow, ColonyTab):
         self.draft = None
         self.source.clear()
 
-    def refresh_drafts(self):
+    def refresh_drafts(self, *, index=None):
         self.draft_picker.clear()
+        self.expression_draft_picker.clear()
         if self.store:
-            for d in self.store.drafts():
+            for d in self.store.drafts(index=index):
                 r = d["record"]
-                self.draft_picker.addItem(f"{r.get('mouse_id') or '?'} · {r.get('session_date') or '?'} · {r['record_id'][:8]}", r["record_id"])
+                picker = self.expression_draft_picker if r.get("data_type") == "expression" else self.draft_picker
+                picker.addItem(f"{r.get('mouse_id') or '?'} · {r.get('session_date') or '?'} · {r['record_id'][:8]}", r["record_id"])
 
     def refresh(self):
         if not self.store:
             return
         try:
-            self.refresh_drafts()
+            # A fresh scan belongs to this refresh only. Avoid repeating the NAS
+            # traversal for every draft, row, and record read.
+            index = self.store.index()
+            catalog = self.store._catalog()
+            self.refresh_drafts(index=index)
             self.filter_task.blockSignals(True)
-            for info in self.store.index().values():
-                task_type = info.get("experiment_type")
-                if task_type and self.filter_task.findText(task_type) < 0:
-                    self.filter_task.addItem(task_type)
-            self.filter_task.blockSignals(False)
-            self.refresh_records()
-            self.file_picker.clear()
-            for fid, f in self.store._catalog()["files"].items():
-                self.file_picker.addItem(f"{f['original_filename']} · {fid}", fid)
+            try:
+                for info in index.values():
+                    task_type = info.get("experiment_type")
+                    if task_type and self.filter_task.findText(task_type) < 0:
+                        self.filter_task.addItem(task_type)
+            finally:
+                self.filter_task.blockSignals(False)
+            self.refresh_records(index=index, catalog=catalog)
+            self.file_picker.blockSignals(True)
+            try:
+                self.file_picker.clear()
+                for fid, f in catalog["files"].items():
+                    self.file_picker.addItem(f"{f['original_filename']} · {fid}", fid)
+            finally:
+                self.file_picker.blockSignals(False)
+            self.show_locations()
             self.root_picker.clear()
             self.root_picker.addItems(list(self.store.roots))
             pending = self.store.pending() + self.store.pending_migrations() + self.store.pending_profiles()
@@ -507,12 +540,14 @@ class Window(QMainWindow, ColonyTab):
         except Exception as exc:
             self.status.setText(str(exc))
 
-    def refresh_records(self):
+    def refresh_records(self, _signal=None, *, index=None, catalog=None):
         if not self.store:
             return
         try:
+            index = self.store.index() if index is None else index
+            catalog = self.store._catalog() if catalog is None else catalog
             self.records.setRowCount(0)
-            for info in self.store.index().values():
+            for info in index.values():
                 if self.filter_mouse.text() and self.filter_mouse.text() not in str(info["mouse_id"]):
                     continue
                 if self.filter_date.text() and self.filter_date.text() not in str(info["session_date"]):
@@ -520,15 +555,17 @@ class Window(QMainWindow, ColonyTab):
                 if self.filter_day.text() and self.filter_day.text() != str(info["training_day"]):
                     continue
                 task_filter = self.filter_task.currentText().strip()
-                if task_filter and task_filter != "All task types" and info["experiment_type"] != task_filter:
+                if task_filter and task_filter != "All experiment types" and info["experiment_type"] != task_filter:
+                    continue
+                if self.filter_data_type.currentIndex() and info.get("data_type") != self.filter_data_type.currentText():
                     continue
                 if self.filter_kind.currentIndex() and info["record_type"] != self.filter_kind.currentText():
                     continue
                 available = "—"
                 if info["record_type"] == "data" and info["integrity"] == "ok":
-                    r = self.store.read_record(info["record_id"])
+                    r = self.store.read_record(info["record_id"], index=index)
                     try:
-                        available = "Present (hash not rechecked)" if all(any(l["available"] for l in self.store.file_locations(f["file_id"])) for f in r["files"]) else "Missing"
+                        available = "Present (hash not rechecked)" if all(any(l["available"] for l in self.store.file_locations(f["file_id"], catalog=catalog)) for f in r["files"]) else "Missing"
                     except LoggerError:
                         available = "Catalog pending"
                 row = self.records.rowCount()
@@ -556,6 +593,7 @@ class Window(QMainWindow, ColonyTab):
             self.raw.setPlainText(json.dumps(detail, indent=2, ensure_ascii=False))
             self.csv_table.clear()
             self.csv_table.setRowCount(0)
+            self.expression_files.setRowCount(0)
             self.plot_column.clear()
             self.preview_rows = []
             if record.get("data_type") == "task":
@@ -568,6 +606,18 @@ class Window(QMainWindow, ColonyTab):
                     for j, value in enumerate(row):
                         self.csv_table.setItem(i, j, QTableWidgetItem(value))
                 self.plot_column.addItems(headers)
+            elif record.get("data_type") == "expression":
+                from .expression import CHANNELS
+                for f in record["files"]:
+                    locations = self.store.file_locations(f["file_id"])
+                    for location in locations or [{}]:
+                        row = self.expression_files.rowCount()
+                        self.expression_files.insertRow(row)
+                        values = [CHANNELS[f["role"]][0], f["original_filename"], f["size_bytes"],
+                                  location.get("path") or location.get("relative_path", ""),
+                                  "Present (hash not rechecked)" if location.get("available") else "Missing"]
+                        for col, value in enumerate(values):
+                            self.expression_files.setItem(row, col, QTableWidgetItem(str(value)))
         except Exception as exc:
             self.raw.setPlainText(str(exc))
 

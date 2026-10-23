@@ -199,6 +199,12 @@ def test_mouse_colony_ui_requires_row_choice_and_saves(store, workbook, tmp_path
     monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
     w = Window(config)
     w.show()
+    archive_scans = []
+    original_index = w.store.index
+    def counted_index():
+        archive_scans.append(True)
+        return original_index()
+    monkeypatch.setattr(w.store, "index", counted_index)
     w.tabs.setCurrentIndex(2)
     assert w.tabs.tabText(2) == "Mouse colony"
     w.colony_mouse.setText("107")
@@ -207,6 +213,9 @@ def test_mouse_colony_ui_requires_row_choice_and_saves(store, workbook, tmp_path
     w.colony_workbook.setText(str(workbook))
     w.search_colony()
     wait_job(app, w)
+    assert not archive_scans, "Colony search must not refresh the acquisition archive"
+    assert w.tabs.isEnabled() and w.progress.isHidden()
+    assert "matching row(s)" in w.status.text()
     assert w.colony_results.rowCount() == 3
     assert not w.colony_results.selectionModel().selectedRows()
     assert not w.colony_import.isEnabled()
@@ -228,6 +237,8 @@ def test_mouse_colony_ui_requires_row_choice_and_saves(store, workbook, tmp_path
     w.colony_surgeries.item(0, 2).setText("Synthetic surgeon")
     w.save_colony_profile()
     wait_job(app, w)
+    assert not archive_scans, "Saving a colony profile must not refresh acquisition records"
+    assert w.tabs.isEnabled() and w.progress.isHidden()
     assert not errors
     profile = store.load_mouse_profile("107")
     assert profile["colony_id"] == "G107" and profile["mouse_id"] == "107"
