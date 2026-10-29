@@ -130,6 +130,14 @@ def test_publication_recovery(store, draft, phase):
 
 
 def test_git_failure_preserves_source_and_pending(store, draft, sample, monkeypatch):
+    import errno
+    from experiment_logger import transfers
+    rename = transfers.rename_path
+    def cross_device(source, destination):
+        if Path(source) == sample.resolve():
+            raise OSError(errno.EXDEV, 'Synthetic cross-device move')
+        return rename(source, destination)
+    monkeypatch.setattr(transfers, 'rename_path', cross_device)
     original_git = store.git
     def broken(*args):
         if "commit" in args:
@@ -141,7 +149,7 @@ def test_git_failure_preserves_source_and_pending(store, draft, sample, monkeypa
     assert sample.exists() and len(store.index()) == 2
     monkeypatch.setattr(store, "git", original_git)
     assert store.recover()[0]["git_committed"]
-    assert sample.exists(), "Recovery must not silently delete original acquisition files"
+    assert not sample.exists(), "The explicitly authorized move completes only after verified recovery and Git commit"
 
 
 def test_intended_git_paths_only(store, draft):

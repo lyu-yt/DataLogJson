@@ -100,13 +100,15 @@ class ExpressionTab:
         layout.addWidget(self.expression_notes)
         self.expression_complete = QCheckBox("Acquisition is finished and all source TIFFs are closed")
         layout.addWidget(self.expression_complete)
-        layout.addWidget(QLabel("Files are copied to <archive>/expression/mouse_<ID>/YYMMDD/left/green, left/red, right, or other."))
+        self.expression_move = QCheckBox('Move sources: direct move when possible; otherwise verified copy and source removal')
+        layout.addWidget(self.expression_move)
+        layout.addWidget(QLabel("Destination: <archive>/expression/mouse_<ID>/YYMMDD/left/green, left/red, right, or other."))
         actions = QHBoxLayout()
         self._button("Save draft", self.save_expression_draft, actions)
         self._button("Validate", self.validate_expression_form, actions)
-        self._button("Finalize / copy TIFFs…", self.finalize_expression_form, actions).setObjectName("primary")
+        self._button("Finalize / transfer TIFFs…", self.finalize_expression_form, actions).setObjectName("primary")
         outer.addLayout(actions)
-        self.expression_messages = QLabel("Drop a folder to begin. Sources are retained; copying and verification run in the background.")
+        self.expression_messages = QLabel("Drop a folder to begin. Choose Move to relocate sources, or leave it unchecked to retain them. Transfers run in the background.")
         self.expression_messages.setWordWrap(True)
         self.expression_messages.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         outer.addWidget(self.expression_messages)
@@ -165,6 +167,7 @@ class ExpressionTab:
         self.expression_date.clear()
         self.expression_notes.clear()
         self.expression_complete.setChecked(False)
+        self.expression_move.setChecked(False)
         for key in CHANNELS:
             self.expression_checks[key].setChecked(False)
             self.expression_paths[key].clear()
@@ -180,6 +183,7 @@ class ExpressionTab:
             self.expression_checks[key].setChecked(r["metadata"]["channels"][key]["selected"])
             self.expression_paths[key].setPlainText("\n".join(d["channel_paths"][key]))
         self.expression_complete.setChecked(False)
+        self.expression_move.setChecked(False)
         count = sum(len(paths) for key, paths in d["channel_paths"].items()
                     if r["metadata"]["channels"][key]["selected"])
         self.expression_messages.setText(f"{count} TIFF(s) selected. Review channels, paths, mouse, and date before saving.")
@@ -240,14 +244,16 @@ class ExpressionTab:
             if not self.expression_complete.isChecked():
                 raise LoggerError("Confirm acquisition has finished and source TIFFs are closed")
             plan = self.store.plan_expression(d)
+            move = self.expression_move.isChecked()
             lines = [f"{CHANNELS[item['channel']][0]}: {item['source']}\n  → {Path(self.store.roots['archive']) / item['relative_path']}" for item in plan["items"]]
-            question = "Copy and verify these TIFFs?\n\n" + "\n\n".join(lines)
-            question += f"\n\nMetadata: {self.store.metadata / 'records' / plan['layout']['directory_name']}\n\nOriginal files will be retained."
+            question = ("Move and verify these TIFFs?\n\n" if move else "Copy and verify these TIFFs?\n\n") + "\n\n".join(lines)
+            question += f"\n\nMetadata: {self.store.metadata / 'records' / plan['layout']['directory_name']}\n\n"
+            question += ('A direct move is attempted first. Otherwise a verified copy is made and the original is removed after the metadata Git commit. Already moved files stay in the archive after cancellation; use Recover to resume.' if move else 'Original files will be retained.')
             if QMessageBox.question(self, "Finalize expression check", question) != QMessageBox.StandardButton.Yes:
                 return
             self.expression_draft = self.store.save_draft(d)
             frozen = deepcopy(self.expression_draft)
-            self.run_job(lambda progress, cancel: self.store.finalize_expression(frozen, source_complete=True,
+            self.run_job(lambda progress, cancel: self.store.finalize_expression(frozen, move=move, source_complete=True,
                          progress=progress, cancel=cancel), self.expression_finalized)
         except Exception as exc:
             self.error(str(exc))
@@ -256,7 +262,10 @@ class ExpressionTab:
         self.expression_draft = None
         self.clear_expression_fields()
         self.expression_source.clear()
-        self.expression_messages.setText(f"Copied {len(receipt['files'])} TIFF(s); finalized locally · " +
+        moved = all(f.get('source_removed', False) for f in receipt['files'])
+        pending = any(f.get('method') for f in receipt['files']) and not moved
+        action = 'Moved' if moved else 'Transferred' if pending else 'Copied'
+        self.expression_messages.setText(f"{action} {len(receipt['files'])} TIFF(s); finalized locally · " +
             ("Git committed" if receipt["git_committed"] else "Git pending — use Recover in Browse") +
-            f" · Sources retained\nMetadata: {self.store.metadata / receipt['record_directory']}")
+            f" · {'Sources moved' if moved else 'Source removal pending — use Recover' if pending else 'Sources retained'}\nMetadata: {self.store.metadata / receipt['record_directory']}")
         self.status.setText(self.expression_messages.text())

@@ -92,5 +92,6 @@ def test_failed_colony_job_restores_controls_without_archive_scan(tmp_path, monk
         assert errors == ["Synthetic colony failure"]
         assert not successes and not refreshes
         assert w.tabs.isEnabled() and w.progress.isHidden() and w.cancel_button.isHidden()
+        assert w.progress_eta.isHidden() and not w.progress_timer.isActive()
     finally:
         w.close()

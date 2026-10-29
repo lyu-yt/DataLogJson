@@ -6,7 +6,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QLineEdit, QFormLayout, QDoubleSpinBox, QSpinBox, QComboBox,
@@ -19,6 +19,8 @@ from .store import Store
 from .layout import metadata_directory
 from .colony_gui import ColonyTab
 from .expression_gui import ExpressionTab
+from .imaging_gui import ImagingTab
+from .time_estimate import TimeEstimate
 
 
 class Job(QThread):
@@ -31,10 +33,15 @@ class Job(QThread):
         self.function = function
         self.refresh_archive = refresh_archive
         self.stop = threading.Event()
+        self.eta = TimeEstimate()
 
     def run(self):
         try:
-            self.result.emit(self.function(lambda n, total: self.progress.emit(int(n * 100 / max(total, 1))), self.stop.is_set))
+            def report(n, total):
+                self.eta.observe(n, total)
+                self.progress.emit(max(0, min(100, int(n * 100 / max(total, 1)))))
+            report.phase = self.eta.phase
+            self.result.emit(self.function(report, self.stop.is_set))
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -87,7 +94,7 @@ class Trace(QWidget):
             painter.drawLine(a, b)
 
 
-class Window(QMainWindow, ColonyTab, ExpressionTab):
+class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
     def __init__(self, config_path=None):
         super().__init__()
         self.config_path = Path(config_path or ".logger-local/config.json").resolve()
@@ -112,6 +119,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         self._browse_tab()
         self._colony_tab()
         self._expression_tab()
+        self._imaging_tab()
         self._locations_tab()
         self._settings_tab()
         footer = QHBoxLayout()
@@ -123,6 +131,13 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         footer.addWidget(self.progress)
         footer.addWidget(self.cancel_button)
         layout.addLayout(footer)
+        self.progress_eta = QLabel()
+        self.progress_eta.setWordWrap(True)
+        self.progress_eta.hide()
+        layout.addWidget(self.progress_eta)
+        self.progress_timer = QTimer(self)
+        self.progress_timer.setInterval(500)
+        self.progress_timer.timeout.connect(self.update_transfer_estimate)
         self.status = QLabel("Choose an archive folder in Settings to get started.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -214,7 +229,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         layout.addLayout(form)
         layout.addWidget(QLabel("Sampling interval: unknown  ·  Exact acquisition start/end: unknown"))
         self.complete = QCheckBox("Acquisition is finished and the source file is closed")
-        self.move = QCheckBox("Move the source to the archive after copying, verification, and metadata commit")
+        self.move = QCheckBox("Move source: direct move when possible; otherwise verified copy and source removal")
         layout.addWidget(self.complete)
         layout.addWidget(self.move)
         actions = QHBoxLayout()
@@ -248,7 +263,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         layout.addLayout(filters)
         kinds = QHBoxLayout()
         self.filter_data_type = QComboBox()
-        self.filter_data_type.addItems(["All data types", "task", "expression"])
+        self.filter_data_type.addItems(["All data types", "task", "expression", "imaging"])
         kinds.addWidget(self.filter_kind)
         kinds.addWidget(self.filter_data_type)
         self._button("Refresh", self.refresh, kinds)
@@ -277,7 +292,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         self.expression_files.setHorizontalHeaderLabels(["Channel", "Original filename", "Bytes", "Archive path", "Status"])
         self.expression_files.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.expression_files.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.detail_tabs.addTab(self.expression_files, "Expression files")
+        self.detail_tabs.addTab(self.expression_files, "TIFF files")
         plot_page = QWidget()
         plot_layout = QVBoxLayout(plot_page)
         self.plot_column = QComboBox()
@@ -289,6 +304,9 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         layout.addWidget(self.detail_tabs, 3)
         actions = QHBoxLayout()
         self._button("Add amendment…", self.add_amendment, actions)
+        self.linked_behavior_button = self._button("Open linked behavior", self.open_linked_behavior, actions)
+        self.linked_behavior_button.setEnabled(False)
+        self.linked_behavior_id = None
         self._button("Rebuild index", self.rebuild_index, actions)
         self._button("Recover pending publication / Git", self.recover, actions)
         layout.addLayout(actions)
@@ -332,6 +350,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
                                "CSVs: <archive>/robot-csv/mouse_<ID>/YYMMDD/<number>/\n"
                                "Mouse profile: <archive>/metadata-json/records/mouse_<ID>/mouse_info.json\n"
                                "Expression TIFFs: <archive>/expression/mouse_<ID>/YYMMDD/left/green, left/red, right, other\n"
+                               "Imaging TIFFs: <archive>/imaging/mouse_<ID>/YYMMDD/left or right\n"
                                "Machine paths stay in local settings. Git stays local. Backups are separate.\n"
                                "To relocate a root, update its path here. Keep its logical root name the same."))
         layout.addStretch()
@@ -368,6 +387,8 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
             self.colony_profile = self.colony_saved_profile = None
             self.expression_draft = None
             self.clear_expression_fields()
+            self.imaging_draft = None
+            self.clear_imaging_fields()
             self.refresh()
             self.status.setText(f"Storage ready. Metadata repository: {store.metadata}. Drop a CSV to log a session.")
             self.tabs.setCurrentIndex(0)
@@ -453,6 +474,9 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.cancel_button.setVisible(True)
+        self.progress_eta.setText(self.job.eta.text())
+        self.progress_eta.show()
+        self.progress_timer.start()
         self.status.setText("Working… file verification and NAS transfer may take longer than form entry.")
         self.job.progress.connect(self.progress.setValue)
         self.job.result.connect(success)
@@ -461,11 +485,17 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
         self.job.start()
 
     def job_finished(self):
+        self.progress_timer.stop()
+        self.progress_eta.hide()
         self.tabs.setEnabled(True)
         self.progress.setVisible(False)
         self.cancel_button.setVisible(False)
         if self.job is None or self.job.refresh_archive:
             self.refresh()
+
+    def update_transfer_estimate(self):
+        if self.job:
+            self.progress_eta.setText(self.job.eta.text())
 
     def finalize(self):
         try:
@@ -480,7 +510,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
             move = self.move.isChecked()
             question = (f"{'MOVE' if move else 'COPY'} this file?\n\nSource: {draft['source_path']}\n\nDestination: {target}\n\n"
                         + f"Metadata: {self.store.metadata / 'records' / layout['directory_name']}\n\n"
-                        + ("The original will be deleted only after verified copying and metadata commit." if move else "The original will be retained.")
+                        + ("A direct move is attempted first. Otherwise a verified copy is made and the original is removed after the metadata Git commit. Already moved files remain in the archive after cancellation; Recover resumes registration." if move else "The original will be retained.")
                         + "\n\nFinalized metadata is read-only. Corrections use amendments.")
             if QMessageBox.question(self, "Finalize session", question) != QMessageBox.StandardButton.Yes:
                 return
@@ -500,10 +530,12 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
     def refresh_drafts(self, *, index=None):
         self.draft_picker.clear()
         self.expression_draft_picker.clear()
+        self.imaging_draft_picker.clear()
         if self.store:
             for d in self.store.drafts(index=index):
                 r = d["record"]
-                picker = self.expression_draft_picker if r.get("data_type") == "expression" else self.draft_picker
+                picker = (self.imaging_draft_picker if r.get("data_type") == "imaging" else
+                          self.expression_draft_picker if r.get("data_type") == "expression" else self.draft_picker)
                 picker.addItem(f"{r.get('mouse_id') or '?'} · {r.get('session_date') or '?'} · {r['record_id'][:8]}", r["record_id"])
 
     def refresh(self):
@@ -534,7 +566,8 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
             self.show_locations()
             self.root_picker.clear()
             self.root_picker.addItems(list(self.store.roots))
-            pending = self.store.pending() + self.store.pending_migrations() + self.store.pending_profiles()
+            pending = (self.store.pending() + self.store.pending_migrations() + self.store.pending_profiles()
+                       + self.store.pending_imaging() + self.store.pending_transfers())
             if pending:
                 self.status.setText(f"{len(pending)} pending publication/Git operation(s). Use Recover in Browse.")
         except Exception as exc:
@@ -578,6 +611,8 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
             self.status.setText(str(exc))
 
     def show_detail(self):
+        self.linked_behavior_id = None
+        self.linked_behavior_button.setEnabled(False)
         row = self.records.currentRow()
         if row < 0 or not self.records.item(row, 7):
             return
@@ -606,20 +641,47 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
                     for j, value in enumerate(row):
                         self.csv_table.setItem(i, j, QTableWidgetItem(value))
                 self.plot_column.addItems(headers)
-            elif record.get("data_type") == "expression":
+            elif record.get("data_type") in ("expression", "imaging"):
                 from .expression import CHANNELS
+                if record.get("data_type") == "imaging" and record["metadata"]["behavior"]:
+                    self.linked_behavior_id = record["metadata"]["behavior"]["record_id"]
+                    self.linked_behavior_button.setEnabled(True)
                 for f in record["files"]:
                     locations = self.store.file_locations(f["file_id"])
                     for location in locations or [{}]:
                         row = self.expression_files.rowCount()
                         self.expression_files.insertRow(row)
-                        values = [CHANNELS[f["role"]][0], f["original_filename"], f["size_bytes"],
+                        label = f["role"].capitalize() if record["data_type"] == "imaging" else CHANNELS[f["role"]][0]
+                        values = [label, f["original_filename"], f["size_bytes"],
                                   location.get("path") or location.get("relative_path", ""),
                                   "Present (hash not rechecked)" if location.get("available") else "Missing"]
                         for col, value in enumerate(values):
                             self.expression_files.setItem(row, col, QTableWidgetItem(str(value)))
         except Exception as exc:
             self.raw.setPlainText(str(exc))
+
+    def open_linked_behavior(self):
+        rid = self.linked_behavior_id
+        if not rid:
+            return
+        filters = (self.filter_mouse, self.filter_date, self.filter_day, self.filter_task,
+                   self.filter_kind, self.filter_data_type)
+        for field in filters:
+            field.blockSignals(True)
+        try:
+            for field in (self.filter_mouse, self.filter_date, self.filter_day):
+                field.clear()
+            for field in (self.filter_task, self.filter_kind, self.filter_data_type):
+                field.setCurrentIndex(0)
+        finally:
+            for field in filters:
+                field.blockSignals(False)
+        self.refresh_records()
+        for row in range(self.records.rowCount()):
+            if self.records.item(row, 7).text() == rid:
+                self.records.selectRow(row)
+                return
+        self.status.setText('Linked behavior record is missing; use Locations or Recover.')
 
     def plot_update(self):
         col = self.plot_column.currentIndex()
@@ -660,7 +722,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab):
 
     def recover(self):
         if self.store:
-            self.run_job(lambda p, c: self.store.recover(), lambda result: self.status.setText(json.dumps(result)))
+            self.run_job(lambda p, c: self.store.recover(p, c), lambda result: self.status.setText(json.dumps(result)))
 
     def commit_catalog(self):
         if self.store:

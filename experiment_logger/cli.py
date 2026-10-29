@@ -19,10 +19,12 @@ def main(argv=None):
     new.add_argument("source")
     expr = sub.add_parser("expression-draft", help="Create an expression draft from one mouse folder")
     expr.add_argument("folder")
+    imaging = sub.add_parser("imaging-draft", help="Create an imaging draft; review side/channel/behavior fields before finalize --move")
+    imaging.add_argument("folder")
     final = sub.add_parser("finalize")
     final.add_argument("draft_id")
     final.add_argument("--source-complete", action="store_true")
-    final.add_argument("--move", action="store_true", help="Explicitly authorize removal of this source after verified archival")
+    final.add_argument("--move", action="store_true", help="Authorize direct moves; otherwise verified copies and source removal after the metadata Git commit")
     for name in ("browse", "recover", "rebuild-index", "rebuild-catalog", "commit-catalog"):
         sub.add_parser(name)
     preview = sub.add_parser("plan-paths", help="Preview readable path migration without changing archive files")
@@ -76,6 +78,10 @@ def main(argv=None):
                     result = store.save_draft(d)
                 case "expression-draft":
                     d = store.new_expression(args.folder)
+                    d["record"]["operator"] = config["operator"]
+                    result = store.save_draft(d)
+                case "imaging-draft":
+                    d = store.new_imaging(args.folder)
                     d["record"]["operator"] = config["operator"]
                     result = store.save_draft(d)
                 case "finalize":

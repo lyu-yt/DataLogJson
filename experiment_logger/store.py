@@ -154,11 +154,35 @@ class Store:
         from .expression import new_expression
         return new_expression(folder)
 
+    def new_imaging(self, folder):
+        from .imaging import new_imaging
+        return new_imaging(folder)
+
+    def behavior_candidates(self, mouse_id, session_date):
+        from .imaging import behavior_candidates
+        return behavior_candidates(self, mouse_id, session_date)
+
+    def plan_imaging(self, draft):
+        from .imaging import plan_imaging
+        return plan_imaging(self, draft)
+
+    def finalize_imaging(self, draft, **kwargs):
+        from .imaging import finalize_imaging
+        return finalize_imaging(self, draft, **kwargs)
+
+    def pending_imaging(self):
+        from .imaging import pending_imaging
+        return pending_imaging(self)
+
     def plan_expression(self, draft):
         from .expression import plan_expression
         return plan_expression(self, draft)
 
-    def finalize_expression(self, draft, *, source_complete=False, progress=None, cancel=None, failpoint=None):
+    def finalize_expression(self, draft, *, move=False, source_complete=False, progress=None, cancel=None, failpoint=None):
+        if move:
+            from .transfers import finalize_move
+            return finalize_move(self, draft, source_complete=source_complete,
+                                 progress=progress, cancel=cancel, failpoint=failpoint)
         from .expression import finalize_expression
         return finalize_expression(self, draft, source_complete=source_complete,
                                    progress=progress, cancel=cancel, failpoint=failpoint)
@@ -228,7 +252,7 @@ class Store:
             if not folder.is_dir() or folder.is_symlink():
                 continue
             if (not (folder / "manifest.json").is_file() and not any(folder.glob("*.seal.json"))
-                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "session.json", "analysis_run.json", "amendment.json"))):
+                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "imaging.json", "session.json", "analysis_run.json", "amendment.json"))):
                 continue
             try:
                 entries = bundle_entries(folder)
@@ -395,7 +419,7 @@ class Store:
         return prefix + str(max(used, default=0) + 1)
 
     def _seal(self, r, data):
-        refs = list(r.get("datasets", []))
+        refs = list(r.get("datasets", [])) + list(r.get("related_records", []))
         refs.extend(r.get("run", {}).get("inputs", []))
         if "original" in r:
             refs.append(r["original"])
@@ -417,7 +441,7 @@ class Store:
         for r in records:
             if r.get("record_state") != "finalized":
                 raise LoggerError("Only finalized records can be published")
-            refs = list(r.get("datasets", [])) + r.get("run", {}).get("inputs", [])
+            refs = list(r.get("datasets", [])) + list(r.get("related_records", [])) + r.get("run", {}).get("inputs", [])
             if "original" in r:
                 refs.append(r["original"])
             for ref in refs:
@@ -549,7 +573,11 @@ class Store:
         return [read_json(p) for p in sorted((self.metadata / ".profile-operations").glob("*.json"))
                 if read_json(p)["phase"] != "git_committed"]
 
-    def recover(self):
+    def pending_transfers(self):
+        from .transfers import pending_transfers
+        return pending_transfers(self)
+
+    def recover(self, progress=None, cancel=None):
         with lock(self.metadata):
             # Repair a catalog replacement interrupted after its history snapshot.
             snapshots = sorted((self.metadata / "catalog_history").glob("*.json"))
@@ -559,7 +587,11 @@ class Store:
             from .profiles import finish_profile
             migrations = [finish_migration(self, op) for op in self.pending_migrations()]
             profiles = [finish_profile(self, op) for op in self.pending_profiles()]
-            return migrations + profiles + [self._finish(op) for op in self.pending()]
+            publications = [self._finish(op) for op in self.pending()]
+            from .imaging import recover_imaging_locked
+            from .transfers import recover_transfers_locked
+            return (migrations + profiles + publications + recover_imaging_locked(self, progress, cancel)
+                    + recover_transfers_locked(self, progress, cancel))
 
     def plan_readable_migration(self):
         from .migration import plan_migration
@@ -581,11 +613,16 @@ class Store:
             return {"git_committed": True, "commit": self.git("rev-parse", "HEAD"), "backed_up": False}
 
     def finalize(self, draft, *, move=False, source_complete=False, progress=None, cancel=None, failpoint=None):
+        if draft["record"].get("data_type") == "imaging":
+            return self.finalize_imaging(draft, move_confirmed=move, source_complete=source_complete,
+                                        progress=progress, cancel=cancel, failpoint=failpoint)
         if draft["record"].get("data_type") == "expression":
-            if move:
-                raise LoggerError("Expression logging copies TIFFs; source removal is not supported")
-            return self.finalize_expression(draft, source_complete=source_complete,
+            return self.finalize_expression(draft, move=move, source_complete=source_complete,
                                             progress=progress, cancel=cancel, failpoint=failpoint)
+        if move:
+            from .transfers import finalize_move
+            return finalize_move(self, draft, source_complete=source_complete,
+                                 progress=progress, cancel=cancel, failpoint=failpoint)
         if not source_complete:
             raise LoggerError("Confirm acquisition has finished and the source file is closed")
         self._check_ready()
@@ -656,23 +693,6 @@ class Store:
             receipt = self._publish([r, session], [entry], r["operator"], failpoint, layout)
             receipt.update(session_number=layout["number"], csv_relative_path=relative)
             receipt["source_removed"] = False
-            if move and receipt["git_committed"]:
-                try:
-                    if source == target.resolve() or before != signature(source):
-                        raise LoggerError("Source changed; original retained")
-                    if hash_file(source, progress, cancel) != hashes or hash_file(target, progress, cancel) != hashes:
-                        raise LoggerError("Cleanup verification failed; original retained")
-                    if before != signature(source):
-                        raise LoggerError("Source changed; original retained")
-                    source.unlink()
-                    receipt["source_removed"] = True
-                    journal = read_json(move_journal)
-                    journal["source_removed"] = True
-                    atomic_json(move_journal, journal)
-                except (OSError, LoggerError) as exc:
-                    receipt["cleanup_pending"] = str(exc)
-            elif move:
-                receipt["cleanup_pending"] = "Original retained until Git commit succeeds. Recovery never deletes it automatically."
             atomic_json(self.metadata / ".receipts" / f"{receipt['transaction_id']}.json", receipt)
             return receipt
 
