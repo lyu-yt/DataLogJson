@@ -1,6 +1,6 @@
 % MATLAB smoke test. Verified with R2023a; synthetic fixture, no real acquisitions.
 % Generate a local demo with create_demo.py, then set LOGGER_JSON_FIXTURE to
-% a generated task.json, expression.json or imaging.json path. Fixtures stay out of Git.
+% a generated task.json, expression.json, imaging.json or stim.json path. Fixtures stay out of Git.
 fixture = getenv('LOGGER_JSON_FIXTURE');
 if isempty(fixture)
     fixture = fullfile(fileparts(mfilename('fullpath')), 'synthetic_task_finalized.json');
@@ -10,7 +10,18 @@ r = jsondecode(fileread(fixture));
 assert(strcmp(r.record_type, 'data'));
 assert(strcmp(r.record_state, 'finalized'));
 assert(strcmp(r.mouse_id, '007')); % string, leading zeros preserved
-if strcmp(r.data_type, 'imaging')
+if strcmp(r.data_type, 'stim')
+    assert(strcmp(r.experiment_type, 'stimulation'));
+    assert(r.metadata.reviewed);
+    assert(islogical(r.metadata.behavior_session));
+    assert(isfield(r.metadata.extraction, 'parameters'));
+    assert(isfield(r.metadata.extraction, 'sources'));
+    assert(numel(r.files) >= 4);
+    p = r.metadata.extraction.parameters;
+    spiral = p(strcmp({p.name}, 'spiral_size'));
+    assert(strcmp(spiral.unit, 'scanimage_unit'));
+    assert(all(spiral.value(:) == [3; 3]));
+elseif strcmp(r.data_type, 'imaging')
     assert(strcmp(r.experiment_type, 'in_vivo_imaging'));
     assert(islogical(r.metadata.behavior_session));
     assert(isfield(r.metadata.sides, 'left') && isfield(r.metadata.sides, 'right'));

@@ -20,6 +20,7 @@ from .layout import metadata_directory
 from .colony_gui import ColonyTab
 from .expression_gui import ExpressionTab
 from .imaging_gui import ImagingTab
+from .stim_gui import StimTab
 from .time_estimate import TimeEstimate
 
 
@@ -94,7 +95,7 @@ class Trace(QWidget):
             painter.drawLine(a, b)
 
 
-class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
+class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
     def __init__(self, config_path=None):
         super().__init__()
         self.config_path = Path(config_path or ".logger-local/config.json").resolve()
@@ -120,6 +121,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
         self._colony_tab()
         self._expression_tab()
         self._imaging_tab()
+        self._stim_tab()
         self._locations_tab()
         self._settings_tab()
         footer = QHBoxLayout()
@@ -263,7 +265,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
         layout.addLayout(filters)
         kinds = QHBoxLayout()
         self.filter_data_type = QComboBox()
-        self.filter_data_type.addItems(["All data types", "task", "expression", "imaging"])
+        self.filter_data_type.addItems(["All data types", "task", "expression", "imaging", "stim"])
         kinds.addWidget(self.filter_kind)
         kinds.addWidget(self.filter_data_type)
         self._button("Refresh", self.refresh, kinds)
@@ -292,7 +294,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
         self.expression_files.setHorizontalHeaderLabels(["Channel", "Original filename", "Bytes", "Archive path", "Status"])
         self.expression_files.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.expression_files.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.detail_tabs.addTab(self.expression_files, "TIFF files")
+        self.detail_tabs.addTab(self.expression_files, "Files")
         plot_page = QWidget()
         plot_layout = QVBoxLayout(plot_page)
         self.plot_column = QComboBox()
@@ -351,6 +353,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
                                "Mouse profile: <archive>/metadata-json/records/mouse_<ID>/mouse_info.json\n"
                                "Expression TIFFs: <archive>/expression/mouse_<ID>/YYMMDD/left/green, left/red, right, other\n"
                                "Imaging TIFFs: <archive>/imaging/mouse_<ID>/YYMMDD/left or right\n"
+                               "Stim files: <archive>/stim/mouse_<ID>/YYMMDD/<number>/imaging, stimPara, other\n"
                                "Machine paths stay in local settings. Git stays local. Backups are separate.\n"
                                "To relocate a root, update its path here. Keep its logical root name the same."))
         layout.addStretch()
@@ -389,6 +392,10 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
             self.clear_expression_fields()
             self.imaging_draft = None
             self.clear_imaging_fields()
+            from .stim import new_stim
+            self.stim_draft = new_stim()
+            self.fill_stim_form()
+            self.stim_draft = None
             self.refresh()
             self.status.setText(f"Storage ready. Metadata repository: {store.metadata}. Drop a CSV to log a session.")
             self.tabs.setCurrentIndex(0)
@@ -531,10 +538,12 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
         self.draft_picker.clear()
         self.expression_draft_picker.clear()
         self.imaging_draft_picker.clear()
+        self.stim_draft_picker.clear()
         if self.store:
             for d in self.store.drafts(index=index):
                 r = d["record"]
-                picker = (self.imaging_draft_picker if r.get("data_type") == "imaging" else
+                picker = (self.stim_draft_picker if r.get("data_type") == "stim" else
+                          self.imaging_draft_picker if r.get("data_type") == "imaging" else
                           self.expression_draft_picker if r.get("data_type") == "expression" else self.draft_picker)
                 picker.addItem(f"{r.get('mouse_id') or '?'} · {r.get('session_date') or '?'} · {r['record_id'][:8]}", r["record_id"])
 
@@ -567,7 +576,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
             self.root_picker.clear()
             self.root_picker.addItems(list(self.store.roots))
             pending = (self.store.pending() + self.store.pending_migrations() + self.store.pending_profiles()
-                       + self.store.pending_imaging() + self.store.pending_transfers())
+                       + self.store.pending_imaging() + self.store.pending_transfers() + self.store.pending_stim())
             if pending:
                 self.status.setText(f"{len(pending)} pending publication/Git operation(s). Use Recover in Browse.")
         except Exception as exc:
@@ -641,9 +650,9 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
                     for j, value in enumerate(row):
                         self.csv_table.setItem(i, j, QTableWidgetItem(value))
                 self.plot_column.addItems(headers)
-            elif record.get("data_type") in ("expression", "imaging"):
+            elif record.get("data_type") in ("expression", "imaging", "stim"):
                 from .expression import CHANNELS
-                if record.get("data_type") == "imaging" and record["metadata"]["behavior"]:
+                if record.get("data_type") in ("imaging", "stim") and record["metadata"]["behavior"]:
                     self.linked_behavior_id = record["metadata"]["behavior"]["record_id"]
                     self.linked_behavior_button.setEnabled(True)
                 for f in record["files"]:
@@ -651,7 +660,8 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab):
                     for location in locations or [{}]:
                         row = self.expression_files.rowCount()
                         self.expression_files.insertRow(row)
-                        label = f["role"].capitalize() if record["data_type"] == "imaging" else CHANNELS[f["role"]][0]
+                        label = (CHANNELS[f["role"]][0] if record["data_type"] == "expression"
+                                 else f["role"].replace("_", " ").capitalize())
                         values = [label, f["original_filename"], f["size_bytes"],
                                   location.get("path") or location.get("relative_path", ""),
                                   "Present (hash not rechecked)" if location.get("available") else "Missing"]

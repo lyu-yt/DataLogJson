@@ -2,7 +2,7 @@
   "type": "object",
   "properties": {
     "schema_version": {
-      "const": "1.4.0"
+      "const": "1.5.0"
     },
     "record_type": {
       "enum": [
@@ -92,7 +92,8 @@
       "enum": [
         "task",
         "expression",
-        "imaging"
+        "imaging",
+        "stim"
       ]
     },
     "acquisition": {
@@ -555,7 +556,7 @@
   ],
   "additionalProperties": false,
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:mouse-experiment-logger:record:1.4.0",
+  "$id": "urn:mouse-experiment-logger:record:1.5.0",
   "title": "Experiment records and editable mouse profiles",
   "allOf": [
     {
@@ -944,6 +945,86 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "data"
+          },
+          "data_type": {
+            "const": "stim"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "experiment_type": {
+            "const": "stimulation"
+          },
+          "metadata": {
+            "$ref": "#/definitions/stim_metadata"
+          },
+          "files": {
+            "items": {
+              "properties": {
+                "role": {
+                  "enum": [
+                    "imaging_tiff",
+                    "stim_recording",
+                    "parameters_csv",
+                    "parameters_mat",
+                    "other"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "csv"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "data"
+          },
+          "data_type": {
+            "const": "stim"
+          },
+          "record_state": {
+            "const": "finalized"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mouse_id": {
+            "type": "string"
+          },
+          "session_date": {
+            "type": "string"
+          },
+          "files": {
+            "minItems": 4
+          },
+          "metadata": {
+            "properties": {
+              "reviewed": {
+                "const": true
+              },
+              "extraction": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "definitions": {
@@ -951,7 +1032,7 @@
       "type": "object",
       "properties": {
         "schema_version": {
-          "const": "1.4.0"
+          "const": "1.5.0"
         },
         "profile_type": {
           "const": "mouse"
@@ -1528,6 +1609,225 @@
       },
       "required": [
         "sides",
+        "behavior_session",
+        "behavior"
+      ],
+      "additionalProperties": false
+    },
+    "stim_value": {
+      "anyOf": [
+        {
+          "type": [
+            "number",
+            "string",
+            "boolean",
+            "null"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/stim_value"
+          }
+        }
+      ]
+    },
+    "stim_metadata": {
+      "type": "object",
+      "properties": {
+        "extraction": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "parser_version": {
+                  "const": "1.0.0"
+                },
+                "parameters": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                      },
+                      "value": {
+                        "$ref": "#/definitions/stim_value"
+                      },
+                      "unit": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "source_role": {
+                        "enum": [
+                          "parameters_csv",
+                          "parameters_mat"
+                        ]
+                      },
+                      "source_field": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "value",
+                      "unit",
+                      "source_role",
+                      "source_field"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "identity_candidates": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "source_role": {
+                        "enum": [
+                          "parameters_csv",
+                          "parameters_mat"
+                        ]
+                      },
+                      "mouse_id": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^[0-9]{3}$"
+                      }
+                    },
+                    "required": [
+                      "source_role",
+                      "mouse_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "sources": {
+                  "type": "array",
+                  "maxItems": 2,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "enum": [
+                          "parameters_csv",
+                          "parameters_mat"
+                        ]
+                      },
+                      "original_filename": {
+                        "type": "string"
+                      },
+                      "file_id": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "original_filename",
+                      "file_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "parser_version",
+                "parameters",
+                "identity_candidates",
+                "sources",
+                "warnings"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "parameter_overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "value": {
+                "$ref": "#/definitions/stim_value"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reviewed": {
+          "type": "boolean"
+        },
+        "behavior_session": {
+          "type": "boolean"
+        },
+        "behavior": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "record_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "csv_file_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "csv_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "session_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              },
+              "required": [
+                "record_id",
+                "sha256",
+                "csv_file_id",
+                "csv_sha256",
+                "session_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "extraction",
+        "parameter_overrides",
+        "reviewed",
         "behavior_session",
         "behavior"
       ],

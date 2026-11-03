@@ -1,6 +1,6 @@
 # DataLogJson
 
-A local Python desktop app for mouse task logging, in-vivo imaging, expression checks, mouse-colony profiles, and
+A local Python desktop app for mouse task logging, in-vivo imaging, stimulation, expression checks, mouse-colony profiles, and
 tracking data files on local or mounted storage. Uses plain JSON and local Git
 history; no server or database is required.
 
@@ -43,6 +43,16 @@ in `datalogjson`, not Conda base. Launchers: `launch.ps1` and `launch.sh`.
   Cross-filesystem transfers use verified copies, then remove sources after the
   metadata Git commit. Checksum work runs in the background; Recover resumes
   interrupted transfers. Browse can open the linked behavior record.
+- **Stim:** two drop areas accept imaging/recording files and stimulation parameters
+  with optional other files. Supports multiple TIFFs and DAT recordings. Reads laser
+  power from `stim_parameters.csv` and pulse, spiral, pattern, and sequence settings
+  from MATLAB v7.3 `stimPara*.mat` files without loading image/mask arrays. Review
+  mouse/date, choose parameter sources when ambiguous, add notes, or correct values
+  while retaining the extracted originals. Save drafts and confirm recoverable moves.
+  Check **Behavior session** to link a robot CSV: a unique logged same-mouse/date
+  match is prefilled; multiple matches need a choice. Choosing a new CSV opens
+  Behavior for registration; return to Stim and find matches to complete the link.
+  Spiral sizes retain ScanImage units; saved settings do not establish delivered pulses.
 - **Browse / details:** filter by mouse, date, training day, experiment, data type, and record type.
   Separate `data` and `session` rows show training day. Inspect read-only JSON,
   CSV previews, numeric plots, expression file locations, amendments, and analysis history.
@@ -83,7 +93,19 @@ expression/mouse_007/YYMMDD/right/right_001.tif
 expression/mouse_007/YYMMDD/other/extra_001.tif
 imaging/mouse_007/YYMMDD/left/left_001.tif
 imaging/mouse_007/YYMMDD/right/right_001.tif
+stim/mouse_007/YYMMDD/1/imaging/green_001.tif
+stim/mouse_007/YYMMDD/1/imaging/data_2.dat
+stim/mouse_007/YYMMDD/1/stimPara/stimPara004.mat
+stim/mouse_007/YYMMDD/1/stimPara/stim_parameters.csv
+stim/mouse_007/YYMMDD/1/other/optional_file
 ```
+
+Stim metadata uses `metadata-json/records/mouse_007/YYMMDD/stimulation_1/stim.json`
+with `session.json` and `manifest.json`. Everything selected in the first drop area
+goes under `imaging/`; in the second area, recognized parameter files go under
+`stimPara/` and other files under `other/`. Dropping does not move files. Imaging,
+expression, and behavior retain their existing layouts.
+Stim acquisition numbers are per mouse/date and independent of linked behavior records.
 
 Mouse IDs stay three-digit strings. JSON dates use `YYYY-MM-DD`; training day is a
 separate operator-assigned number. Acquisition timezone: America/New_York.
@@ -95,12 +117,12 @@ outputs. Machine settings/drafts stay in `.logger-local/`; the archive's separat
 metadata Git repository stays local. Back up the complete archive and local state;
 Git alone is not a data backup, and backups are not automated.
 
-Schema 1.4.0 adds imaging records and fixed behavior links. Older finalized records and their schemas
+Schema 1.5.0 adds stimulation records and extracted-setting provenance. Older finalized records and their schemas
 retain their exact bytes; editable colony profiles update only on explicit save.
 After an interrupted TIFF copy, retry Finalize to reuse verified copies. The
 private `.logger-local/expression-transfers/` journals preserve planned paths;
 include them in local-state backups. Browse Recover handles pending metadata/Git publication.
-Include `.logger-local/imaging-transfers/` and `.logger-local/file-transfers/` in
+Include `.logger-local/imaging-transfers/`, `.logger-local/stim-transfers/`, and `.logger-local/file-transfers/` in
 those backups too. A direct move
 changes the path immediately; if hashing or publication is interrupted, the file
 stays in the archive and Recover resumes registration. Copy-fallback sources stay
@@ -116,13 +138,15 @@ python examples/create_demo.py --destination /absolute/path/to/new-demo-folder
 ```
 
 Tests generate temporary synthetic data. For MATLAB JSON decoding, set
-`LOGGER_JSON_FIXTURE` in MATLAB to a generated synthetic task, expression, or imaging JSON, then run
+`LOGGER_JSON_FIXTURE` in MATLAB to a generated synthetic task, expression, imaging, or stim JSON, then run
 `examples/matlab_json_smoke.m`.
 
 Current scope: one operator and headerless, tab-separated push-task CSVs with
 13-14 numeric columns. Sampling rate/units remain unknown where not supplied;
 plots show sample index, not inferred timing or task performance. Expression
-and imaging logging register TIFF files; image analysis, synchronization, and MATLAB
+and imaging logging register TIFF files. Stim MAT import currently supports MATLAB
+v7.3/HDF5, using `h5py` in the project environment. DAT recordings are registered
+without decoding their signals. Image analysis, synchronization, and MATLAB
 analysis execution are future extensions. Linux/NAS locking and recovery need deployment-specific checks.
 
 ## License

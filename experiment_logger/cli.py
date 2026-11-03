@@ -21,6 +21,13 @@ def main(argv=None):
     expr.add_argument("folder")
     imaging = sub.add_parser("imaging-draft", help="Create an imaging draft; review side/channel/behavior fields before finalize --move")
     imaging.add_argument("folder")
+    stim = sub.add_parser("stim-draft", help="Create a stimulation draft; review settings before finalize --move")
+    stim.add_argument("--imaging", nargs="+", required=True, help="Imaging files or folders")
+    stim.add_argument("--stimpara", nargs="+", required=True, help="Parameter and other files or folders")
+    stim.add_argument("--behavior-session", action="store_true", help="Link a logged same-mouse/date robot CSV")
+    stim.add_argument("--robot-csv", help="Match this robot CSV by full content and mouse/date")
+    stim_refresh = sub.add_parser("stim-refresh", help="Re-extract settings after editing parameter source choices")
+    stim_refresh.add_argument("draft_id")
     final = sub.add_parser("finalize")
     final.add_argument("draft_id")
     final.add_argument("--source-complete", action="store_true")
@@ -83,6 +90,23 @@ def main(argv=None):
                 case "imaging-draft":
                     d = store.new_imaging(args.folder)
                     d["record"]["operator"] = config["operator"]
+                    result = store.save_draft(d)
+                case "stim-draft":
+                    from .stim import add_inputs, choose_behavior_csv, refresh_behavior
+                    d = add_inputs(store.new_stim(), args.imaging, "imaging")
+                    d = add_inputs(d, args.stimpara, "stimpara")
+                    d["record"]["operator"] = config["operator"]
+                    d["record"]["metadata"]["behavior_session"] = args.behavior_session or bool(args.robot_csv)
+                    if args.robot_csv:
+                        d = choose_behavior_csv(store, d, args.robot_csv)
+                    elif args.behavior_session:
+                        d = refresh_behavior(store, d)
+                    result = store.save_draft(d)
+                case "stim-refresh":
+                    from .stim import refresh_parameters, refresh_behavior
+                    d = refresh_parameters(store.load_draft(args.draft_id))
+                    if d["record"]["metadata"]["behavior_session"]:
+                        d = refresh_behavior(store, d)
                     result = store.save_draft(d)
                 case "finalize":
                     result = store.finalize(store.load_draft(args.draft_id), move=args.move, source_complete=args.source_complete)

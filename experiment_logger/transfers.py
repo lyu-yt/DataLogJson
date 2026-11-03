@@ -1,4 +1,4 @@
-"""Shared journaled file moves for task, expression and imaging data."""
+"""Shared journaled file moves for task, expression, imaging and stimulation."""
 from copy import deepcopy
 from pathlib import Path
 import errno
@@ -127,7 +127,7 @@ def recover_transfers_locked(store, progress=None, cancel=None):
 
 
 def _validate_behavior(store, record):
-    if record.get('data_type') == 'imaging':
+    if record.get('data_type') in ('imaging', 'stim'):
         from .imaging import _validate_behavior as check
         check(store, record)
 
@@ -253,7 +253,8 @@ def finish_transfers(store, journal, plan, *, progress=None, cancel=None, failpo
             if r['data_type'] == 'task':
                 registration.update(format='csv', media_type='text/tab-separated-values', csv=item['csv'])
             else:
-                registration.update(format='tiff', media_type='image/tiff')
+                registration.update(format=item.get('format', 'tiff'),
+                                    media_type=item.get('media_type', 'image/tiff'))
             r['files'].append(registration)
             entries.append({'file_id': item['file_id'], 'original_filename': Path(item['source']).name,
                 **item['hashes'], 'locations': [{'root_id': 'archive', 'relative_path': item['relative_path'],

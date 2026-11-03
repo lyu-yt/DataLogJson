@@ -72,7 +72,7 @@ def behavior_candidates(store, mouse_id, session_date):
         r = store.read_record(info['record_id'], index=index)
         f = r['files'][0]
         locations = store.file_locations(f['file_id'], catalog=catalog)
-        result.append({'label': f"{r['experiment_type']} Â· day {r['metadata']['training_day']} Â· {f['original_filename']} Â· {r['record_id'][:8]}",
+        result.append({'label': f"{r['experiment_type']} | day {r['metadata']['training_day']} | {f['original_filename']} | {r['record_id'][:8]}",
             'path': next((p['path'] for p in locations if p['available']), '(CSV missing; use Locations)'),
             'reference': {'record_id': r['record_id'], 'sha256': info['sha256'],
                           'session_id': r['session_id'], 'csv_file_id': f['file_id'], 'csv_sha256': f['sha256']}})

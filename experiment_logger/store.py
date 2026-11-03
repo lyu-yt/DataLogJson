@@ -158,6 +158,22 @@ class Store:
         from .imaging import new_imaging
         return new_imaging(folder)
 
+    def new_stim(self):
+        from .stim import new_stim
+        return new_stim()
+
+    def plan_stim(self, draft):
+        from .stim import plan_stim
+        return plan_stim(self, draft)
+
+    def finalize_stim(self, draft, **kwargs):
+        from .stim import finalize_stim
+        return finalize_stim(self, draft, **kwargs)
+
+    def pending_stim(self):
+        from .stim import pending_stim
+        return pending_stim(self)
+
     def behavior_candidates(self, mouse_id, session_date):
         from .imaging import behavior_candidates
         return behavior_candidates(self, mouse_id, session_date)
@@ -206,7 +222,13 @@ class Store:
             return saved
 
     def load_draft(self, rid):
-        return read_json(self._path(rid, self.local / "drafts"))
+        draft = read_json(self._path(rid, self.local / "drafts"))
+        # Editable drafts may adopt current rules on explicit open/save.
+        # Finalized bytes are read by read_record and never take this path.
+        if draft["record"].get("schema_version") == "1.4.0":
+            from .models import SCHEMA_VERSION
+            draft["record"]["schema_version"] = SCHEMA_VERSION
+        return draft
 
     def drafts(self, *, index=None):
         paths = sorted((self.local / "drafts").glob("*.json"))
@@ -252,7 +274,7 @@ class Store:
             if not folder.is_dir() or folder.is_symlink():
                 continue
             if (not (folder / "manifest.json").is_file() and not any(folder.glob("*.seal.json"))
-                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "imaging.json", "session.json", "analysis_run.json", "amendment.json"))):
+                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "imaging.json", "stim.json", "session.json", "analysis_run.json", "amendment.json"))):
                 continue
             try:
                 entries = bundle_entries(folder)
@@ -590,8 +612,9 @@ class Store:
             publications = [self._finish(op) for op in self.pending()]
             from .imaging import recover_imaging_locked
             from .transfers import recover_transfers_locked
+            from .stim import recover_stim_locked
             return (migrations + profiles + publications + recover_imaging_locked(self, progress, cancel)
-                    + recover_transfers_locked(self, progress, cancel))
+                    + recover_transfers_locked(self, progress, cancel) + recover_stim_locked(self, progress, cancel))
 
     def plan_readable_migration(self):
         from .migration import plan_migration
@@ -613,6 +636,9 @@ class Store:
             return {"git_committed": True, "commit": self.git("rev-parse", "HEAD"), "backed_up": False}
 
     def finalize(self, draft, *, move=False, source_complete=False, progress=None, cancel=None, failpoint=None):
+        if draft["record"].get("data_type") == "stim":
+            return self.finalize_stim(draft, move_confirmed=move, source_complete=source_complete,
+                                     progress=progress, cancel=cancel, failpoint=failpoint)
         if draft["record"].get("data_type") == "imaging":
             return self.finalize_imaging(draft, move_confirmed=move, source_complete=source_complete,
                                         progress=progress, cancel=cancel, failpoint=failpoint)
