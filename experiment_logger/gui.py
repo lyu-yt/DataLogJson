@@ -21,6 +21,7 @@ from .colony_gui import ColonyTab
 from .expression_gui import ExpressionTab
 from .imaging_gui import ImagingTab
 from .stim_gui import StimTab
+from .histology_gui import HistologyTab
 from .time_estimate import TimeEstimate
 
 
@@ -95,7 +96,7 @@ class Trace(QWidget):
             painter.drawLine(a, b)
 
 
-class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
+class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab, HistologyTab):
     def __init__(self, config_path=None):
         super().__init__()
         self.config_path = Path(config_path or ".logger-local/config.json").resolve()
@@ -122,6 +123,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
         self._expression_tab()
         self._imaging_tab()
         self._stim_tab()
+        self._histology_tab()
         self._locations_tab()
         self._settings_tab()
         footer = QHBoxLayout()
@@ -265,7 +267,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
         layout.addLayout(filters)
         kinds = QHBoxLayout()
         self.filter_data_type = QComboBox()
-        self.filter_data_type.addItems(["All data types", "task", "expression", "imaging", "stim"])
+        self.filter_data_type.addItems(["All data types", "task", "expression", "imaging", "stim", "histology"])
         kinds.addWidget(self.filter_kind)
         kinds.addWidget(self.filter_data_type)
         self._button("Refresh", self.refresh, kinds)
@@ -291,7 +293,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
         self.csv_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.detail_tabs.addTab(self.csv_table, "CSV preview")
         self.expression_files = QTableWidget(0, 5)
-        self.expression_files.setHorizontalHeaderLabels(["Channel", "Original filename", "Bytes", "Archive path", "Status"])
+        self.expression_files.setHorizontalHeaderLabels(["Role / channel", "Original filename", "Bytes", "Archive path", "Status"])
         self.expression_files.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.expression_files.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.detail_tabs.addTab(self.expression_files, "Files")
@@ -354,6 +356,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
                                "Expression TIFFs: <archive>/expression/mouse_<ID>/YYMMDD/left/green, left/red, right, other\n"
                                "Imaging TIFFs: <archive>/imaging/mouse_<ID>/YYMMDD/left or right\n"
                                "Stim files: <archive>/stim/mouse_<ID>/YYMMDD/<number>/imaging, stimPara, other\n"
+                               "Histology: <archive>/histology/mouse_<ID>/YYMMDD/<ID>-<slice>/<number>/czi or tif\n"
                                "Machine paths stay in local settings. Git stays local. Backups are separate.\n"
                                "To relocate a root, update its path here. Keep its logical root name the same."))
         layout.addStretch()
@@ -396,6 +399,8 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
             self.stim_draft = new_stim()
             self.fill_stim_form()
             self.stim_draft = None
+            self.histology_draft = None
+            self.histology_images.setRowCount(0)
             self.refresh()
             self.status.setText(f"Storage ready. Metadata repository: {store.metadata}. Drop a CSV to log a session.")
             self.tabs.setCurrentIndex(0)
@@ -539,10 +544,12 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
         self.expression_draft_picker.clear()
         self.imaging_draft_picker.clear()
         self.stim_draft_picker.clear()
+        self.histology_draft_picker.clear()
         if self.store:
             for d in self.store.drafts(index=index):
                 r = d["record"]
-                picker = (self.stim_draft_picker if r.get("data_type") == "stim" else
+                picker = (self.histology_draft_picker if r.get("data_type") == "histology" else
+                          self.stim_draft_picker if r.get("data_type") == "stim" else
                           self.imaging_draft_picker if r.get("data_type") == "imaging" else
                           self.expression_draft_picker if r.get("data_type") == "expression" else self.draft_picker)
                 picker.addItem(f"{r.get('mouse_id') or '?'} · {r.get('session_date') or '?'} · {r['record_id'][:8]}", r["record_id"])
@@ -576,7 +583,8 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
             self.root_picker.clear()
             self.root_picker.addItems(list(self.store.roots))
             pending = (self.store.pending() + self.store.pending_migrations() + self.store.pending_profiles()
-                       + self.store.pending_imaging() + self.store.pending_transfers() + self.store.pending_stim())
+                       + self.store.pending_imaging() + self.store.pending_transfers() + self.store.pending_stim()
+                       + self.store.pending_histology())
             if pending:
                 self.status.setText(f"{len(pending)} pending publication/Git operation(s). Use Recover in Browse.")
         except Exception as exc:
@@ -621,6 +629,7 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
 
     def show_detail(self):
         self.linked_behavior_id = None
+        self.linked_behavior_button.setText('Open linked behavior')
         self.linked_behavior_button.setEnabled(False)
         row = self.records.currentRow()
         if row < 0 or not self.records.item(row, 7):
@@ -650,10 +659,14 @@ class Window(QMainWindow, ColonyTab, ExpressionTab, ImagingTab, StimTab):
                     for j, value in enumerate(row):
                         self.csv_table.setItem(i, j, QTableWidgetItem(value))
                 self.plot_column.addItems(headers)
-            elif record.get("data_type") in ("expression", "imaging", "stim"):
+            elif record.get("data_type") in ("expression", "imaging", "stim", "histology"):
                 from .expression import CHANNELS
                 if record.get("data_type") in ("imaging", "stim") and record["metadata"]["behavior"]:
                     self.linked_behavior_id = record["metadata"]["behavior"]["record_id"]
+                    self.linked_behavior_button.setEnabled(True)
+                elif record.get('data_type') == 'histology' and record['metadata']['linked_record']:
+                    self.linked_behavior_id = record['metadata']['linked_record']['record_id']
+                    self.linked_behavior_button.setText('Open linked experiment')
                     self.linked_behavior_button.setEnabled(True)
                 for f in record["files"]:
                     locations = self.store.file_locations(f["file_id"])

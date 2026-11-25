@@ -7,4 +7,8 @@ dependencies:
   - jsonschema>=4.23,<5
   - openpyxl>=3.1,<4
   - h5py>=3.11,<4
+  - tifffile>=2024.8
   - pytest>=8,<10
+  - pip
+  - pip:
+      - pylibCZIrw>=6.1,<7

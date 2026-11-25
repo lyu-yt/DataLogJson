@@ -1,6 +1,7 @@
-% MATLAB smoke test. Verified with R2023a; synthetic fixture, no real acquisitions.
+% MATLAB smoke test using synthetic fixtures, no real acquisitions.
+% Histology checks are unexecuted: the local R2023a license is unavailable.
 % Generate a local demo with create_demo.py, then set LOGGER_JSON_FIXTURE to
-% a generated task.json, expression.json, imaging.json or stim.json path. Fixtures stay out of Git.
+% a generated task, expression, imaging, stim or histology JSON. Fixtures stay out of Git.
 fixture = getenv('LOGGER_JSON_FIXTURE');
 if isempty(fixture)
     fixture = fullfile(fileparts(mfilename('fullpath')), 'synthetic_task_finalized.json');
@@ -10,7 +11,22 @@ r = jsondecode(fileread(fixture));
 assert(strcmp(r.record_type, 'data'));
 assert(strcmp(r.record_state, 'finalized'));
 assert(strcmp(r.mouse_id, '007')); % string, leading zeros preserved
-if strcmp(r.data_type, 'stim')
+if strcmp(r.data_type, 'histology')
+    assert(strcmp(r.experiment_type, 'histology'));
+    assert(r.metadata.reviewed);
+    assert(strcmp(r.metadata.slice_index, '3-1C'));
+    if isempty(r.metadata.linked_record)
+        assert(isfield(r.metadata.colony_profile, 'profile_id'));
+        assert(strcmp(r.metadata.colony_profile.mouse_id, r.mouse_id));
+        assert(r.metadata.colony_profile.revision >= 1);
+        assert(strcmp(r.metadata.colony_profile.snapshot.profile_id, r.metadata.colony_profile.profile_id));
+    else
+        assert(isfield(r.metadata.linked_record, 'record_id'));
+    end
+    assert(~isempty(r.metadata.images));
+    assert(isfield(r.metadata.images(1).czi, 'bounds'));
+    assert(~isempty(r.files));
+elseif strcmp(r.data_type, 'stim')
     assert(strcmp(r.experiment_type, 'stimulation'));
     assert(r.metadata.reviewed);
     assert(islogical(r.metadata.behavior_session));

@@ -130,6 +130,9 @@ def _validate_behavior(store, record):
     if record.get('data_type') in ('imaging', 'stim'):
         from .imaging import _validate_behavior as check
         check(store, record)
+    elif record.get('data_type') == 'histology':
+        from .histology import validate_link
+        validate_link(store, record)
 
 
 def _identity(sig):
@@ -232,14 +235,29 @@ def finish_transfers(store, journal, plan, *, progress=None, cancel=None, failpo
     if plan['phase'] in ('publishing', 'published'):
         phase(progress, 'Saving metadata and Git history')
         operations = [read_json(p) for p in (store.metadata / '.operations').glob('*.json')]
-        operation = next((op for op in operations if set(op['record_ids']) == {r['record_id'], r['session_id']}), None)
+        expected_ids = {r['record_id'], r['session_id']}
+        if plan.get('amendment_id'):
+            expected_ids.add(plan['amendment_id'])
+        operation = next((op for op in operations if set(op['record_ids']) == expected_ids), None)
         if operation:
             plan['receipt'] = store._finish(operation)
             plan['phase'] = 'published'
             save()
     if plan['phase'] != 'published':
+        if r.get('data_type') == 'histology' and r['schema_version'] == '1.6.0':
+            # Only unpublished draft journals adopt the new optional-link rules.
+            # A prepared publication above keeps its original sealed bytes/schema.
+            from .models import SCHEMA_VERSION
+            plan['record']['schema_version'] = SCHEMA_VERSION
+            plan['record']['metadata'].setdefault('colony_profile', None)
+            r = deepcopy(plan['record'])
+            save()
         for item in plan['items']:
             _transfer_item(store, item, save, meter, cancel, failpoint)
+        if r['data_type'] == 'histology':
+            from .histology import prepare_exports
+            prepare_exports(store, journal, plan, progress, cancel)
+            r = deepcopy(plan['record'])
         if cancel and cancel():
             raise Cancelled('Cancelled before publication; use Recover to resume the moved files')
         entries = []
@@ -267,7 +285,11 @@ def finish_transfers(store, journal, plan, *, progress=None, cancel=None, failpo
         plan['phase'] = 'publishing'
         save()
         phase(progress, 'Saving metadata and Git history')
-        receipt = store._publish([r, session], entries, r['operator'], failpoint, plan['layout'])
+        records = [r, session]
+        if r['data_type'] == 'histology' and plan.get('amendment_id'):
+            from .histology import linking_amendment
+            records.append(linking_amendment(r, plan['amendment_id']))
+        receipt = store._publish(records, entries, r['operator'], failpoint, plan['layout'])
         plan.update(receipt=receipt, phase='published')
         save()
     receipt = deepcopy(plan['receipt'])
@@ -317,6 +339,8 @@ def finish_transfers(store, journal, plan, *, progress=None, cancel=None, failpo
         for entry in receipt['files']:
             entry['channel'] = entry['side']
     receipt['session_number'] = plan['layout']['number']
+    if plan.get('amendment_id'):
+        receipt['amendment_id'] = plan['amendment_id']
     plan['receipt'] = receipt
     if receipt['git_committed'] and receipt['source_removed']:
         plan['phase'] = 'complete'

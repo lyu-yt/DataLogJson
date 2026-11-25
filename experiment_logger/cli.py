@@ -28,6 +28,10 @@ def main(argv=None):
     stim.add_argument("--robot-csv", help="Match this robot CSV by full content and mouse/date")
     stim_refresh = sub.add_parser("stim-refresh", help="Re-extract settings after editing parameter source choices")
     stim_refresh.add_argument("draft_id")
+    histology = sub.add_parser('histology-draft', help='Register confocal images with an optional experiment link')
+    histology.add_argument('paths', nargs='+', help='CZI files or slice folders')
+    histology.add_argument('--target-record', help='Existing same-mouse data/session record ID')
+    histology.add_argument('--export-tiff', action='store_true', help='Also create a stitched OME-TIFF stack')
     final = sub.add_parser("finalize")
     final.add_argument("draft_id")
     final.add_argument("--source-complete", action="store_true")
@@ -110,6 +114,23 @@ def main(argv=None):
                     result = store.save_draft(d)
                 case "finalize":
                     result = store.finalize(store.load_draft(args.draft_id), move=args.move, source_complete=args.source_complete)
+                case 'histology-draft':
+                    d = store.new_histology(args.paths)
+                    d['record']['operator'] = config['operator']
+                    d['record']['metadata']['export_tiff'] = args.export_tiff
+                    if d['record']['mouse_id']:
+                        from .histology import colony_reference
+                        d['record']['metadata']['colony_profile'] = colony_reference(store, d['record']['mouse_id'])
+                    if args.target_record:
+                        info = store.index().get(args.target_record)
+                        if not info or info['integrity'] != 'ok':
+                            raise LoggerError('Choose a valid existing experiment record')
+                        ref = {'record_id':args.target_record,'sha256':info['sha256']}
+                        d['record']['metadata']['linked_record'] = ref
+                        d['record']['related_records'] = [ref]
+                        from .histology import validate_link
+                        validate_link(store,d['record'])
+                    result = store.save_draft(d)
                 case "browse": result = store.index()
                 case "show": result = store.read_record(args.id)
                 case "verify": result = store.verify_file(args.id)

@@ -64,6 +64,8 @@ def empty_labels():
 def reserve_label(record, labels, archive, records):
     """Mutate a caller-owned labels dictionary; caller serializes reservation."""
     ctx = context(record)
+    if record.get('data_type') == 'histology':
+        return _reserve_histology_label(record, ctx, labels, archive, records)
     if record.get("data_type") == "stim":
         return _reserve_stim_label(ctx, labels, archive, records)
     prior = labels["sessions"].get(ctx["session_id"])
@@ -124,6 +126,8 @@ def _reserve_stim_label(ctx, labels, archive, records):
 
 
 def role_filename(record):
+    if record.get('data_type') == 'histology':
+        return 'histology.json'
     if record.get("data_type") == "stim":
         return "stim.json"
     if record.get("data_type") == "imaging":
@@ -132,6 +136,30 @@ def role_filename(record):
         return "expression.json"
     return {"data": "task.json", "session": "session.json", "amendment": "amendment.json",
             "analysis_run": "analysis_run.json"}[record["record_type"]]
+
+
+def _reserve_histology_label(record, ctx, labels, archive, records):
+    folder, day = mouse_folder(ctx['mouse_id']), day_folder(ctx['session_date'])
+    slice_index = record['metadata']['slice_index']
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',slice_index or ''):
+        raise LoggerError('Slice index: use letters, digits, dashes, or underscores')
+    prior = labels['sessions'].get(ctx['session_id'])
+    if prior and all(prior.get(k)==v for k,v in ctx.items()) and prior.get('slice_index')==slice_index:
+        return prior
+    key=f"histology:{ctx['mouse_id']}:{ctx['session_date']}"
+    highest=labels['counters'].get(key,0)
+    for path in (Path(archive)/'histology'/folder/day).glob('*/*'):
+        if path.name.isdecimal():
+            highest=max(highest,int(path.name))
+    for path in (Path(records)/folder/day).glob('histology_*'):
+        ending=path.name.rsplit('_',1)[-1]
+        if ending.isdecimal():
+            highest=max(highest,int(ending))
+    number=highest+1
+    label={**ctx,'slice_index':slice_index,'number':number,'directory_name':f'{folder}/{day}/histology_{number}'}
+    labels['counters'][key]=number
+    labels['sessions'][ctx['session_id']]=label
+    return label
 
 
 def bundle_entries(folder):

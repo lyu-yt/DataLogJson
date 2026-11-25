@@ -17,7 +17,7 @@ TASK_TYPES = ("water linear push", "water two-angle push")
 COLUMNS = ("pos_x", "pos_y", "cur1", "cur2", "mvtyp", "mvangl", "frame_right",
            "frame_left", "lick", "sol", "states", "laser", "camfr", "laserCounter")
 RESOURCE = Path(__file__).parent
-SCHEMA_VERSION = "1.5.0"
+SCHEMA_VERSION = "1.7.0"
 SCHEMA_FILES = {SCHEMA_VERSION: "record.json"}
 
 
@@ -164,6 +164,9 @@ def validate(record, final=False, schema=None):
             errors.extend(record_errors(record, is_final))
         if record.get("data_type") == "stim":
             from .stim import record_errors
+            errors.extend(record_errors(record, is_final))
+        if record.get("data_type") == "histology":
+            from .histology import record_errors
             errors.extend(record_errors(record, is_final))
         ids = [f.get("file_id") for f in record["files"]]
         if len(ids) != len(set(ids)):

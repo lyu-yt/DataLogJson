@@ -2,7 +2,7 @@
   "type": "object",
   "properties": {
     "schema_version": {
-      "const": "1.5.0"
+      "const": "1.7.0"
     },
     "record_type": {
       "enum": [
@@ -93,7 +93,8 @@
         "task",
         "expression",
         "imaging",
-        "stim"
+        "stim",
+        "histology"
       ]
     },
     "acquisition": {
@@ -556,7 +557,7 @@
   ],
   "additionalProperties": false,
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:mouse-experiment-logger:record:1.5.0",
+  "$id": "urn:mouse-experiment-logger:record:1.7.0",
   "title": "Experiment records and editable mouse profiles",
   "allOf": [
     {
@@ -1025,6 +1026,99 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "data"
+          },
+          "data_type": {
+            "const": "histology"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "experiment_type": {
+            "const": "histology"
+          },
+          "metadata": {
+            "$ref": "#/definitions/histology_metadata"
+          },
+          "files": {
+            "items": {
+              "properties": {
+                "role": {
+                  "enum": [
+                    "confocal_czi",
+                    "histology_tiff"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "csv"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_type": {
+            "const": "data"
+          },
+          "data_type": {
+            "const": "histology"
+          },
+          "record_state": {
+            "const": "finalized"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mouse_id": {
+            "type": "string"
+          },
+          "session_date": {
+            "type": "string"
+          },
+          "files": {
+            "minItems": 1
+          },
+          "metadata": {
+            "properties": {
+              "reviewed": {
+                "const": true
+              },
+              "slice_index": {
+                "type": "string"
+              }
+            },
+            "anyOf": [
+              {
+                "properties": {
+                  "linked_record": {
+                    "type": "object"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "colony_profile": {
+                    "type": "object"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
     }
   ],
   "definitions": {
@@ -1032,7 +1126,7 @@
       "type": "object",
       "properties": {
         "schema_version": {
-          "const": "1.5.0"
+          "const": "1.7.0"
         },
         "profile_type": {
           "const": "mouse"
@@ -1830,6 +1924,344 @@
         "reviewed",
         "behavior_session",
         "behavior"
+      ],
+      "additionalProperties": false
+    },
+    "histology_metadata": {
+      "type": "object",
+      "properties": {
+        "slice_index": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+        },
+        "brain_region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hemisphere": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "marker_notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linked_record": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "record_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "record_id",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "export_tiff": {
+          "type": "boolean"
+        },
+        "reviewed": {
+          "type": "boolean"
+        },
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "file_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "original_filename": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_specimen_label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "czi": {
+                "type": "object",
+                "properties": {
+                  "reader_version": {
+                    "type": "string"
+                  },
+                  "acquisition_time_original": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "acquisition_time_local": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+                      }
+                    ]
+                  },
+                  "bounds": {
+                    "type": "object",
+                    "required": [
+                      "X",
+                      "Y",
+                      "C",
+                      "Z",
+                      "T"
+                    ],
+                    "additionalProperties": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "scenes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "index": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "x": {
+                          "type": "integer"
+                        },
+                        "y": {
+                          "type": "integer"
+                        },
+                        "width": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "height": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "index",
+                        "x",
+                        "y",
+                        "width",
+                        "height"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "pixel_types": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "pixel_size_um": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "channels": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "index",
+                        "name"
+                      ]
+                    }
+                  },
+                  "tile_count": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "tile_grids": {
+                    "type": "array"
+                  },
+                  "full_resolution_subblocks": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "objective": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "declared_dimensions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "required": [
+                  "reader_version",
+                  "acquisition_time_original",
+                  "acquisition_time_local",
+                  "bounds",
+                  "scenes",
+                  "pixel_types",
+                  "pixel_size_um",
+                  "channels",
+                  "tile_count",
+                  "tile_grids",
+                  "full_resolution_subblocks",
+                  "objective",
+                  "declared_dimensions"
+                ],
+                "additionalProperties": false
+              },
+              "tiff_file_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tiff_export": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "file_id",
+              "original_filename",
+              "source_specimen_label",
+              "czi",
+              "tiff_file_id",
+              "tiff_export"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "colony_profile": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "profile_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "mouse_id": {
+                  "type": "string",
+                  "pattern": "^[0-9]{3}$"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "source_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "snapshot": {
+                  "type": "object",
+                  "properties": {
+                    "profile_type": {
+                      "const": "mouse"
+                    },
+                    "profile_id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "mouse_id": {
+                      "type": "string",
+                      "pattern": "^[0-9]{3}$"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "schema_version": {
+                      "type": "string",
+                      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+                    }
+                  },
+                  "required": [
+                    "profile_type",
+                    "profile_id",
+                    "mouse_id",
+                    "revision",
+                    "schema_version"
+                  ]
+                }
+              },
+              "required": [
+                "profile_id",
+                "mouse_id",
+                "revision",
+                "source_sha256",
+                "snapshot"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "slice_index",
+        "brain_region",
+        "hemisphere",
+        "marker_notes",
+        "linked_record",
+        "export_tiff",
+        "reviewed",
+        "images",
+        "colony_profile"
       ],
       "additionalProperties": false
     }

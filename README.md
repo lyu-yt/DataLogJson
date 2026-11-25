@@ -1,6 +1,6 @@
 # DataLogJson
 
-A local Python desktop app for mouse task logging, in-vivo imaging, stimulation, expression checks, mouse-colony profiles, and
+A local Python desktop app for mouse task logging, in-vivo imaging, stimulation, histology, expression checks, mouse-colony profiles, and
 tracking data files on local or mounted storage. Uses plain JSON and local Git
 history; no server or database is required.
 
@@ -53,6 +53,17 @@ in `datalogjson`, not Conda base. Launchers: `launch.ps1` and `launch.sh`.
   match is prefilled; multiple matches need a choice. Choosing a new CSV opens
   Behavior for registration; return to Stim and find matches to complete the link.
   Spiral sizes retain ScanImage units; saved settings do not establish delivered pulses.
+- **Histology:** drop CZI files or a brain-slice folder; infer mouse and slice
+  index from a label such as `007-3-1C`, and read acquisition time, Z planes,
+  tile count/grid, channels, calibration, objective, and full-resolution scene
+  bounds. Add observations, region/side, and actual stain/marker notes. A saved
+  colony profile is enough to log Histology; its revision and contents are captured
+  in the registration. Optionally select a same-mouse experiment to add a linking
+  amendment. Confirmed moves register the CZI. Optional stitched OME-BigTIFF export retains
+  grayscale bit depth and all Z/channel/time planes, with separate scene series.
+  Exports use recorded tile positions and highest-tile-index overlaps, without
+  blending or image-based registration. TIFF pixels are checked against the
+  stitched source, and conversion settings/software versions are recorded.
 - **Browse / details:** filter by mouse, date, training day, experiment, data type, and record type.
   Separate `data` and `session` rows show training day. Inspect read-only JSON,
   CSV previews, numeric plots, expression file locations, amendments, and analysis history.
@@ -98,6 +109,8 @@ stim/mouse_007/YYMMDD/1/imaging/data_2.dat
 stim/mouse_007/YYMMDD/1/stimPara/stimPara004.mat
 stim/mouse_007/YYMMDD/1/stimPara/stim_parameters.csv
 stim/mouse_007/YYMMDD/1/other/optional_file
+histology/mouse_007/YYMMDD/007-3-1C/1/czi/New-03.czi
+histology/mouse_007/YYMMDD/007-3-1C/1/tif/New-03.ome.tif
 ```
 
 Stim metadata uses `metadata-json/records/mouse_007/YYMMDD/stimulation_1/stim.json`
@@ -106,6 +119,10 @@ goes under `imaging/`; in the second area, recognized parameter files go under
 `stimPara/` and other files under `other/`. Dropping does not move files. Imaging,
 expression, and behavior retain their existing layouts.
 Stim acquisition numbers are per mouse/date and independent of linked behavior records.
+Histology metadata uses `records/mouse_007/YYMMDD/histology_1/` under the metadata
+directory, containing `histology.json`, `session.json`, and `manifest.json`.
+`amendment.json` is added only when an experiment is selected; it references the
+Histology record and file IDs/checksums. A mouse/date Histology counter prevents acquisition overwrites.
 
 Mouse IDs stay three-digit strings. JSON dates use `YYYY-MM-DD`; training day is a
 separate operator-assigned number. Acquisition timezone: America/New_York.
@@ -117,12 +134,14 @@ outputs. Machine settings/drafts stay in `.logger-local/`; the archive's separat
 metadata Git repository stays local. Back up the complete archive and local state;
 Git alone is not a data backup, and backups are not automated.
 
-Schema 1.5.0 adds stimulation records and extracted-setting provenance. Older finalized records and their schemas
+Schema 1.7.0 supports Histology with a colony-profile snapshot and an optional
+experiment amendment, alongside CZI metadata and TIFF-export provenance. Older finalized records and their schemas
 retain their exact bytes; editable colony profiles update only on explicit save.
 After an interrupted TIFF copy, retry Finalize to reuse verified copies. The
 private `.logger-local/expression-transfers/` journals preserve planned paths;
 include them in local-state backups. Browse Recover handles pending metadata/Git publication.
-Include `.logger-local/imaging-transfers/`, `.logger-local/stim-transfers/`, and `.logger-local/file-transfers/` in
+Include `.logger-local/imaging-transfers/`, `.logger-local/stim-transfers/`,
+`.logger-local/histology-transfers/`, and `.logger-local/file-transfers/` in
 those backups too. A direct move
 changes the path immediately; if hashing or publication is interrupted, the file
 stays in the archive and Recover resumes registration. Copy-fallback sources stay
@@ -138,7 +157,7 @@ python examples/create_demo.py --destination /absolute/path/to/new-demo-folder
 ```
 
 Tests generate temporary synthetic data. For MATLAB JSON decoding, set
-`LOGGER_JSON_FIXTURE` in MATLAB to a generated synthetic task, expression, imaging, or stim JSON, then run
+`LOGGER_JSON_FIXTURE` in MATLAB to a generated synthetic task, expression, imaging, stim, or histology JSON, then run
 `examples/matlab_json_smoke.m`.
 
 Current scope: one operator and headerless, tab-separated push-task CSVs with
@@ -148,6 +167,11 @@ and imaging logging register TIFF files. Stim MAT import currently supports MATL
 v7.3/HDF5, using `h5py` in the project environment. DAT recordings are registered
 without decoding their signals. Image analysis, synchronization, and MATLAB
 analysis execution are future extensions. Linux/NAS locking and recovery need deployment-specific checks.
+Histology uses ZEISS `pylibCZIrw` and `tifffile`; the Conda environment installs the
+CZI reader through its `pip` section. TIFF export currently supports consistent
+grayscale channels and XYZCT acquisitions; unsupported extra varying axes are
+reported before a move when export is requested. Original CZI files are retained
+in the archive. Interrupted exports can restart while reusing the moved CZI.
 
 ## License
 

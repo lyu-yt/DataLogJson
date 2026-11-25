@@ -162,6 +162,26 @@ class Store:
         from .stim import new_stim
         return new_stim()
 
+    def new_histology(self, paths, cancel=None):
+        from .histology import new_histology
+        return new_histology(paths, cancel)
+
+    def histology_candidates(self, mouse_id):
+        from .histology import experiment_candidates
+        return experiment_candidates(self, mouse_id)
+
+    def plan_histology(self, draft):
+        from .histology import plan_histology
+        return plan_histology(self, draft)
+
+    def finalize_histology(self, draft, **kwargs):
+        from .histology import finalize_histology
+        return finalize_histology(self, draft, **kwargs)
+
+    def pending_histology(self):
+        from .histology import pending_histology
+        return pending_histology(self)
+
     def plan_stim(self, draft):
         from .stim import plan_stim
         return plan_stim(self, draft)
@@ -225,9 +245,11 @@ class Store:
         draft = read_json(self._path(rid, self.local / "drafts"))
         # Editable drafts may adopt current rules on explicit open/save.
         # Finalized bytes are read by read_record and never take this path.
-        if draft["record"].get("schema_version") == "1.4.0":
+        if draft["record"].get("schema_version") in ("1.4.0", "1.5.0", "1.6.0"):
             from .models import SCHEMA_VERSION
             draft["record"]["schema_version"] = SCHEMA_VERSION
+            if draft['record'].get('data_type') == 'histology':
+                draft['record']['metadata'].setdefault('colony_profile', None)
         return draft
 
     def drafts(self, *, index=None):
@@ -274,7 +296,7 @@ class Store:
             if not folder.is_dir() or folder.is_symlink():
                 continue
             if (not (folder / "manifest.json").is_file() and not any(folder.glob("*.seal.json"))
-                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "imaging.json", "stim.json", "session.json", "analysis_run.json", "amendment.json"))):
+                    and not any((folder / name).is_file() for name in ("task.json", "expression.json", "imaging.json", "stim.json", "histology.json", "session.json", "analysis_run.json", "amendment.json"))):
                 continue
             try:
                 entries = bundle_entries(folder)
@@ -613,8 +635,10 @@ class Store:
             from .imaging import recover_imaging_locked
             from .transfers import recover_transfers_locked
             from .stim import recover_stim_locked
+            from .histology import recover_histology_locked
             return (migrations + profiles + publications + recover_imaging_locked(self, progress, cancel)
-                    + recover_transfers_locked(self, progress, cancel) + recover_stim_locked(self, progress, cancel))
+                    + recover_transfers_locked(self, progress, cancel) + recover_stim_locked(self, progress, cancel)
+                    + recover_histology_locked(self, progress, cancel))
 
     def plan_readable_migration(self):
         from .migration import plan_migration
@@ -636,6 +660,9 @@ class Store:
             return {"git_committed": True, "commit": self.git("rev-parse", "HEAD"), "backed_up": False}
 
     def finalize(self, draft, *, move=False, source_complete=False, progress=None, cancel=None, failpoint=None):
+        if draft["record"].get("data_type") == "histology":
+            return self.finalize_histology(draft, move_confirmed=move, source_complete=source_complete,
+                                          progress=progress, cancel=cancel, failpoint=failpoint)
         if draft["record"].get("data_type") == "stim":
             return self.finalize_stim(draft, move_confirmed=move, source_complete=source_complete,
                                      progress=progress, cancel=cancel, failpoint=failpoint)
